@@ -76,7 +76,9 @@ def fetch_jp_3m_yield() -> pd.Series:
     """Japan short-term rate. The IRSTCB01JPM156N series is monthly; we forward-fill to daily."""
     s = _fetch_fred_series(JP_SERIES)
     # forward-fill to daily so it can join cleanly with daily US/FX data
-    full_index = pd.date_range(s.index.min(), pd.Timestamp.utcnow().normalize(), freq="D")
+    end = pd.Timestamp.utcnow().tz_localize(None).normalize()
+    start = pd.Timestamp(s.index.min()).tz_localize(None)
+    full_index = pd.date_range(start, end, freq="D")
     s_daily = s.reindex(full_index).ffill()
     s_daily.name = JP_SERIES
     return s_daily
