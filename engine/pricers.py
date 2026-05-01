@@ -644,7 +644,8 @@ class RoughHestonPricer(Pricer):
             w = (ks * dt) ** (H - 0.5)
             Y[t + 1] = (w[:, None] * dW_v_hist[: t + 1]).sum(axis=0)
 
-        var_t = xi0 * np.exp(eta * Y - 0.5 * (eta ** 2) * (np.arange(n_steps + 1) * dt) ** (2 * H))
+        time_axis = (np.arange(n_steps + 1) * dt) ** (2 * H)
+        var_t = xi0 * np.exp(eta * Y - 0.5 * (eta ** 2) * time_axis[:, None])
 
         s = np.empty((n_steps + 1, n_paths))
         s[0] = s0
@@ -831,23 +832,24 @@ class NIGPricer(Pricer):
         a = float(params["alpha"]); b = float(params["beta"])
         d = float(params["delta"]); mu = float(params["mu"])
         gamma = np.sqrt(max(a ** 2 - b ** 2, 1e-12))
-        # martingale correction so that E[exp(X)] = 1 per unit time
-        # MGF of NIG at u=1: M(1) = exp(μ + δ(γ - √(α²-(β+1)²)))
+        # NIG cumulants per fit-period (1 day):
+        # κ1 = μ + δβ/γ, κ2 = δα²/γ³, κ3 = 3δα²β/γ⁵
+        k1 = mu + d * b / gamma
+        k2 = d * (a ** 2) / (gamma ** 3)
+        k3 = 3.0 * d * (a ** 2) * b / (gamma ** 5)
+        std = float(np.sqrt(max(k2, 1e-16)))
+        skew = float(k3 / max(std ** 3, 1e-16))
+        # martingale correction (MGF of NIG at u=1 in fit-time units)
+        omega = 0.0
         if a ** 2 - (b + 1.0) ** 2 > 0:
             omega = mu + d * (gamma - np.sqrt(a ** 2 - (b + 1.0) ** 2))
-        else:
-            omega = 0.0
         s = np.empty((n_steps + 1, n_paths))
         s[0] = s0
+        # Cornish–Fisher Gaussian sampler matching first 3 cumulants per step.
         for t in range(n_steps):
-            # NIG increment over dt: X = μ dt + β δ dt² IG + δ √IG Z
-            # Use simpler: scale parameters by dt (NIG is infinitely divisible).
-            d_t = d * dt
-            mu_t = mu * dt
-            # Sample IG(δ_t γ, δ_t² γ²)
-            ig = _sample_ig(d_t * gamma, d_t * d_t, rng, n_paths)
-            X = mu_t + b * ig + np.sqrt(np.maximum(ig, 1e-12)) * rng.standard_normal(n_paths)
-            extra = annual_drift * dt + _apply_extra_drift(extra_drift_fn, s[t]) - omega * dt
+            z = rng.standard_normal(n_paths)
+            X = k1 + std * (z + (skew / 6.0) * (z ** 2 - 1.0))
+            extra = annual_drift * dt + _apply_extra_drift(extra_drift_fn, s[t]) - omega
             s[t + 1] = s[t] * np.exp(extra + X)
         return s
 

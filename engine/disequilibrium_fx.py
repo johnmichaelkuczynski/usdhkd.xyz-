@@ -25,6 +25,14 @@ class EquilibriumModel:
     equilibrium: float     # current equilibrium fair value
     fitted: pd.DataFrame   # date-indexed DataFrame with usdjpy, diff, equilibrium, residual, z
 
+    def zscore_at(self, when: pd.Timestamp) -> float:
+        """Return the band z-score at (or just before) `when`."""
+        z = self.fitted["z"].dropna()
+        z = z.loc[z.index <= when]
+        if len(z) == 0:
+            return 0.0
+        return float(z.iloc[-1])
+
 
 def fit_equilibrium(
     fx_close: pd.Series,
