@@ -1,0 +1,169 @@
+Expand the HKD/USD Edge app to support 13 selectable pricing models (matching the SOXL Options Edge app) and add backtest functionality including pairwise model comparison.
+
+═══════════════════════════════════════════════════════════════
+PART 1 — MODEL SELECTOR (LIVE APP)
+═══════════════════════════════════════════════════════════════
+
+Add a "Model" dropdown at the top of the app. The active model drives the forecast distribution generation, equilibrium overlay (where relevant), and all probability outputs.
+
+13 MODELS TO IMPLEMENT (use the same modular Pricer interface from the SOXL app):
+
+1. Heston
+2. Bates
+3. SVJJ
+4. Merton Jump Diffusion
+5. Kou Jump Diffusion
+6. Variance Gamma (VG)
+7. CGMY
+8. NIG
+9. SABR
+10. Double Heston
+11. Rough Heston
+12. BS with realized vol (Black-Scholes using rolling realized volatility)
+13. BS with GARCH-forecast vol
+
+Each pricer must conform to the interface:
+  class Pricer:
+      def calibrate_historical(self, price_history) -> params
+      def calibrate_market(self, market_data) -> params  # for FX, this may use FX options vol if available; otherwise skip
+      def simulate_paths(self, params, T, n_paths) -> np.ndarray
+      def disequilibrium_adjust(self, params, band_position, lambda_) -> params
+
+For the FX app, calibrate_market may not be needed for all models since the app's primary output is forecast distributions from historical calibration. Implement calibrate_historical for all 13 models. Implement calibrate_market only where FX options data is available and useful.
+
+Each model must support the peg-band disequilibrium overlay defined in Instruction 1. The overlay modifies the drift term in the simulation regardless of which pricer is active.
+
+PARAMETER DASHBOARD per model — each pricer file declares its parameter list and one-line interpretation per parameter. Display the active model's parameters in a "Model Parameters" panel.
+
+═══════════════════════════════════════════════════════════════
+PART 2 — SINGLE-MODEL BACKTEST
+═══════════════════════════════════════════════════════════════
+
+Add a new tab called "Backtest." Within it, three sub-tabs:
+
+SUB-TAB A: "Single Model Backtest"
+
+Inputs:
+- Date range (default: last 3 years to 30 days ago)
+- Forecast horizon to evaluate (1 week / 1 month / 3 months / 6 months — multi-select)
+- Selected model (dropdown — all 13 models available)
+
+ENGINE LOOP:
+For each historical date D in the range:
+  1. Calibrate the selected model using only HKD/USD data through D-1 (no lookahead)
+  2. Generate forecast distribution for each horizon (1w, 1m, 3m, 6m forward from D)
+  3. Record the forecast distribution
+  4. Look up actual HKD/USD rate at D + horizon
+  5. Score the forecast (see metrics below)
+
+EVALUATION METRICS for FX forecast accuracy (different from options mispricing — no Sharpe ratio applies because there are no trades, just forecasts):
+
+  - Coverage rate: did the realized rate fall within the model's 70% confidence band 70% of the time? Within 95% band 95% of the time? A well-calibrated model has coverage matching the stated confidence level.
+  - Continuous Ranked Probability Score (CRPS): standard measure of probabilistic forecast accuracy. Lower is better.
+  - Log score: log of the predicted density at the realized value. Higher is better.
+  - Mean Absolute Error of median forecast: how far off was the median prediction?
+  - Mean Absolute Error of mean forecast: same for the mean.
+  - Calibration plot: predicted probability of being in each band vs. actual frequency of being in that band.
+
+OUTPUT:
+- Coverage table: 70% band coverage, 95% band coverage, calibration plot
+- CRPS, log score, MAE displayed prominently
+- Forecast vs. actual scatter plot (predicted median vs. realized rate)
+- Time series chart: actual rate overlaid with rolling forecast distributions over the backtest period
+- Verdict panel:
+  - "WELL-CALIBRATED — coverage rates match stated confidence levels within 5%"
+  - "OVERCONFIDENT — coverage is below stated levels (model thinks it knows more than it does)"
+  - "UNDERCONFIDENT — coverage exceeds stated levels (forecasts are too wide to be useful)"
+  - "BIASED — forecasts systematically miss in one direction"
+
+SUB-TAB B: "Pairwise Model Comparison"
+
+The user selects EXACTLY TWO models from a dropdown. The backtest runs both models on the same dates, same horizons, same data. Output is a head-to-head comparison view designed for at-a-glance evaluation.
+
+Inputs:
+- Date range
+- Forecast horizon(s)
+- Model A (dropdown)
+- Model B (dropdown)
+
+OUTPUT (split view, side-by-side):
+
+Top section — verdict banner:
+"WINNER: {Model A or Model B}"
+"{Model A} CRPS: {X} | {Model B} CRPS: {Y} | Difference: {X-Y} ({% better})"
+"{Model A} Coverage: {X}% | {Model B} Coverage: {Y}% (target: 95%)"
+"Statistical significance of difference: p = {p-value} (Diebold-Mariano test)"
+
+Middle section — side-by-side metrics table:
+  Metric                | Model A | Model B | Better
+  ─────────────────────┼─────────┼─────────┼────────
+  CRPS (lower=better)  |   X     |   Y     |  A or B
+  Log score            |   X     |   Y     |  A or B
+  70% coverage         |   X     |   Y     |  A or B
+  95% coverage         |   X     |   Y     |  A or B
+  Mean MAE             |   X     |   Y     |  A or B
+  Median MAE           |   X     |   Y     |  A or B
+  Calibration error    |   X     |   Y     |  A or B
+  
+  OVERALL WINNER       |         |         |  A or B
+
+Bottom section — visualization:
+Two side-by-side charts:
+  Left: Model A's actual vs. predicted scatter, with confidence band overlay
+  Right: Model B's same chart
+Same x and y axis scales for direct visual comparison.
+
+Plus a single combined time-series chart showing actual HKD/USD plus both models' median forecast lines and 70% bands, color-coded by model.
+
+The pairwise comparison must be visually unambiguous — the user should be able to tell within 3 seconds which model performed better on the chosen data.
+
+SUB-TAB C: "All-Model Comparison"
+
+Multi-select checkboxes for any subset of the 13 models (default: all 13). Run all selected models on the same backtest. Output:
+
+- Summary table: one row per model, columns for CRPS, log score, 70% coverage, 95% coverage, MAE, calibration error
+- Sorted by CRPS (best at top)
+- Statistical significance matrix: Diebold-Mariano test p-values for each pair (triangular matrix)
+- Rolling-window CRPS chart: trailing 90-day CRPS per model over backtest period
+- "Current Recommendation" panel: best model by recent CRPS, best model by long-term CRPS, most consistent model
+
+═══════════════════════════════════════════════════════════════
+PART 3 — INTEGRATION
+═══════════════════════════════════════════════════════════════
+
+The model selector dropdown in the live app determines which model produces the displayed forecasts. The backtest module is independent — it can backtest any model, regardless of which is currently selected for live use.
+
+After running a backtest, add a button: "Set best model as live default." Clicking sets the live app's active model to whichever model won the backtest.
+
+═══════════════════════════════════════════════════════════════
+PERFORMANCE
+═══════════════════════════════════════════════════════════════
+
+13 models × 3 years × multiple horizons is computationally heavy. Apply:
+
+- Cache HKD/USD price history once, share across all models
+- Cache HIBOR / US Treasury yield series once
+- Recalibrate complex models (Rough Heston, SVJJ, Double Heston) weekly during backtest
+- Recalibrate cheap models (BS variants, Merton) daily
+- Parallelize model backtests via multiprocessing
+- Use 25,000 Monte Carlo paths for forecast generation during backtest (vs. 50,000 in live mode)
+- Progress bar showing per-model status
+- First all-model backtest: expect 20–40 minutes; cached re-runs under 1 minute
+
+═══════════════════════════════════════════════════════════════
+ACCEPTANCE CRITERIA
+═══════════════════════════════════════════════════════════════
+
+1. All 13 models selectable via dropdown in live app.
+2. Active model drives all forecast outputs.
+3. Single Model Backtest tab generates calibration metrics, verdict, and visualizations for any chosen model.
+4. Pairwise Comparison tab produces side-by-side head-to-head evaluation of any 2 chosen models with clear winner.
+5. All-Model Comparison tab ranks all 13 (or any subset) by CRPS and other metrics.
+6. "Set best model as live default" button works.
+7. Backtest performance is acceptable: full 13-model run under 40 minutes first time, under 1 minute cached.
+
+═══════════════════════════════════════════════════════════════
+DELIVERABLE
+═══════════════════════════════════════════════════════════════
+
+Working app with 13 selectable models for live forecasting and full backtest module supporting single-model evaluation, pairwise comparison, and all-model ranking. Build end-to-end. Do not stub. Reuse the modular pricer interface and pricer implementations from the SOXL Options Edge app — share the engine package between the two apps.
