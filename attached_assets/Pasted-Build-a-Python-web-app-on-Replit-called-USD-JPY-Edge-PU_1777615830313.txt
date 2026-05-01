@@ -1,0 +1,81 @@
+Build a Python web app on Replit called "USD/JPY Edge."
+
+PURPOSE
+Forecast the future probability distribution of the USD/JPY exchange rate using a stochastic volatility model (Heston) with a disequilibrium mean-reversion overlay. Output: probability assignments for various USD/JPY ranges at multiple horizons (1 week, 1 month, 3 months, 6 months), with visual probability fans.
+
+DATA SOURCES
+- EODHD API for USD/JPY daily history, 5 years (env: EODHD_API_KEY). Symbol: USDJPY.FOREX.
+- US 3-month Treasury yield (DTB3 from FRED via API, or scrape from Treasury.gov).
+- Japan 3-month government bond yield (from FRED: IRSTCB01JPM156N, or fallback to BoJ).
+- Optional: USD/JPY ATM 1-month implied volatility from EODHD or a free FX vol source. If unavailable, skip — historical calibration is sufficient for this app.
+
+CORE ENGINE — HESTON MODEL
+Same Heston framework as the SOXL app — five parameters (kappa, theta, xi, rho, v0). Same QuantLib or NumPy implementation. Calibrate to USD/JPY return history via maximum likelihood. No options-chain calibration needed for this app since the goal is rate forecasting, not options mispricing. Run historical calibration weekly.
+
+DISEQUILIBRIUM OVERLAY (FX-SPECIFIC)
+USD/JPY has a strong fundamental anchor that equity ETFs don't have: the interest rate differential. Build the equilibrium model as follows:
+
+equilibrium_rate = baseline + beta * (US_3m_yield - JP_3m_yield)
+
+Fit baseline and beta via OLS on 5 years of (rate_differential, USD/JPY) pairs. This gives you a "fair" USD/JPY level conditional on current rate differentials.
+
+Compute z-score: z = (current_USDJPY - equilibrium_rate) / rolling_residual_std.
+
+Adjust the drift in the Heston SDE by -lambda * z, where lambda is fit from historical data on how strongly USD/JPY reverts from extended states.
+
+Note: when JPY is unusually weak (USD/JPY high above equilibrium), historical evidence shows occasional sharp reversals (carry-trade unwinds). The Heston model's negative rho captures some of this; the disequilibrium overlay reinforces it.
+
+(The engine inverts the framework to extract implied parameters from history rather than from option prices, but the output is the same kind of object: a probability distribution, not a point forecast.)
+
+FORECAST GENERATION
+For each horizon (7, 30, 90, 180 days):
+- Run Monte Carlo simulation (50,000 paths) of the disequilibrium-adjusted Heston SDE forward to that horizon.
+- Compute the full distribution of terminal USD/JPY rates.
+- Extract:
+  - Mean forecast
+  - Median forecast
+  - 5th, 25th, 50th, 75th, 95th percentiles
+  - Probability of being in user-defined buckets (e.g., <145, 145-150, 150-155, 155-160, >160)
+  - Probability of JPY appreciation (terminal < current) vs USD appreciation (terminal > current)
+
+VISUAL OUTPUT (priority)
+
+1. Probability Fan Chart. X = time (today out to 6 months). Y = USD/JPY rate. Shaded bands showing 50%, 70%, 90%, 95% confidence intervals of the forecast distribution at each future date. Solid line in middle = median. Overlay actual historical rate for context. Use Plotly.
+
+2. Horizon Distribution Cards. Four panels (1w, 1m, 3m, 6m), each showing:
+   - A histogram of simulated terminal rates
+   - Mean, median, 5/95 percentiles
+   - Probability table for user-defined buckets
+   - "Most likely move" summary line (e.g., "65% probability USD/JPY between 148 and 156 in 30 days; 12% probability above 158; 8% probability below 146")
+
+3. Equilibrium Tracker. Line chart with three lines: actual USD/JPY, model equilibrium rate (from rate differential), and z-score on a secondary axis. This shows the user how stretched the rate is from fundamentals.
+
+4. Parameter Display. Small panel: current Heston parameters (kappa, theta as annualized vol, xi, rho), current rate differential, current z-score, current lambda.
+
+UI LAYOUT
+- Top: current USD/JPY, current US-JP rate differential, current z-score (with color: green = near equilibrium, yellow = stretched, red = very stretched).
+- Probability Fan Chart (largest visual element).
+- Horizon Distribution Cards in a 2x2 grid.
+- Equilibrium Tracker.
+- Parameter Display.
+
+User input: a slider or input box to define custom price buckets (e.g., user types "145, 150, 155, 160" and the app shows probability of landing in each bucket at each horizon).
+
+Use Streamlit for UI. Plotly for all charts. Refresh data daily (FX moves slower than options).
+
+FILE STRUCTURE
+- main.py (Streamlit app)
+- engine/heston.py (same as SOXL app — share the file, ideally as a package)
+- engine/disequilibrium_fx.py (rate-differential equilibrium model)
+- engine/monte_carlo.py (path simulation, distribution extraction)
+- data/eodhd_fx.py (USD/JPY history)
+- data/rates.py (US and JP yields)
+- cache/
+
+ERROR HANDLING
+- If FRED is down, fall back to last cached rate differentials.
+- If calibration fails, use last successful parameter set with a warning.
+- Bound optimizer parameters to physically meaningful ranges.
+
+DELIVERABLE
+A working Streamlit app where I can see the probability fan, see horizon distributions, set custom buckets, and read off probabilities for any USD/JPY range at any horizon. Build it end-to-end. Do not stub functions.
