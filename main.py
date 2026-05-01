@@ -247,7 +247,8 @@ bands = fan_chart_quantiles(s_paths, QS)
 median_path = bands[QS.index(0.5)]
 
 # Historical context: last 365 calendar days
-hist = fx["close"].last("365D")
+_hist_cutoff = fx.index[-1] - pd.Timedelta(days=365)
+hist = fx["close"].loc[fx["close"].index >= _hist_cutoff]
 
 fig_fan = go.Figure()
 
@@ -418,7 +419,8 @@ with row2[1]:
 st.markdown("---")
 st.subheader("Equilibrium Tracker")
 
-et = eq.fitted.last("3Y").copy()
+_eq_cutoff = eq.fitted.index[-1] - pd.Timedelta(days=3 * 365)
+et = eq.fitted.loc[eq.fitted.index >= _eq_cutoff].copy()
 
 fig_eq = make_subplots(specs=[[{"secondary_y": True}]])
 fig_eq.add_trace(
