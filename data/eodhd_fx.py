@@ -1,4 +1,4 @@
-"""USD/JPY daily history from EODHD."""
+"""USD/HKD daily history from EODHD."""
 from __future__ import annotations
 
 import os
@@ -27,8 +27,8 @@ def _is_fresh(path: Path) -> bool:
     return (time.time() - path.stat().st_mtime) < CACHE_TTL_SECONDS
 
 
-def fetch_usdjpy_history(years: int = 5, symbol: str = "USDJPY.FOREX") -> pd.DataFrame:
-    """Fetch daily USD/JPY history from EODHD.
+def fetch_usdhkd_history(years: int = 5, symbol: str = "USDHKD.FOREX") -> pd.DataFrame:
+    """Fetch daily USD/HKD history from EODHD.
 
     Returns a DataFrame with a DatetimeIndex (date) and columns:
       open, high, low, close, adjusted_close, volume

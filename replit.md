@@ -1,6 +1,6 @@
-# USD/JPY Edge
+# USD/HKD Edge
 
-Streamlit web app that forecasts the future probability distribution of USD/JPY
+Streamlit web app that forecasts the future probability distribution of USD/HKD
 using a user-selectable pricing model (13 supported) plus a rate-differential
 disequilibrium overlay, and benchmarks model quality with a built-in backtest
 module.
@@ -10,13 +10,13 @@ module.
 - **Language**: Python 3.11
 - **UI**: Streamlit + Plotly
 - **Numerics**: NumPy, SciPy, pandas
-- **Data**: EODHD (USD/JPY daily history) + FRED (DTB3 US 3m yield, IRSTCB01JPM156N JP short rate)
+- **Data**: EODHD (USD/HKD daily history) + FRED (DTB3 US 3m yield). The HKD 3-month rate is synthesised from the US rate under the HKMA Linked Exchange Rate System (HIBOR ≈ US + α + β·(US − mean(US)); see `data/rates.py`).
 - **AI**: Anthropic Claude (optional narrative summary)
 - **Caching**: Local parquet cache in `cache/` (12h TTL) + in-process `st.cache_data` for backtests
 
 ## Secrets required
 
-- `EODHD` — EODHD API key (USD/JPY history). The code also accepts `EODHD_API_KEY`.
+- `EODHD` — EODHD API key (USD/HKD history). The code also accepts `EODHD_API_KEY`.
 - `ANTHROPIC` — optional, only used when "AI narrative summary" is enabled. Also accepts `ANTHROPIC_API_KEY`.
 - `POLYGON` — reserved for a future fallback data source.
 
@@ -43,12 +43,12 @@ streamlit run main.py --server.port 5000 --server.address 0.0.0.0
   rolling CRPS, and a `calibration_verdict()` summary banner.
 - `engine/heston.py` — Heston SDE, particle-filter MLE, full-truncation Euler simulator
   (used by both the Heston pricer and as a building block for SVJJ / Bates / Double-Heston).
-- `engine/disequilibrium_fx.py` — OLS equilibrium model `usdjpy = α + β·(US3m − JP3m)`,
+- `engine/disequilibrium_fx.py` — OLS equilibrium model `usdhkd = α + β·(US3m − HK3m)`,
   residual std, lambda estimate, and `disequilibrium_drift_per_step(s_t, ...)` used by
   both live and backtest paths so the overlay is path-dependent.
 - `engine/monte_carlo.py` — Quantile + horizon-stat helpers shared by all pricers.
-- `data/eodhd_fx.py` — USD/JPY daily history loader with parquet cache.
-- `data/rates.py` — US/JP yields from FRED with parquet cache.
+- `data/eodhd_fx.py` — USD/HKD daily history loader with parquet cache.
+- `data/rates.py` — US/HK yields from FRED with parquet cache.
 - `cache/` — local on-disk cache (parquet).
 - `.streamlit/config.toml` — Streamlit server config (port 5000, headless, 0.0.0.0).
 

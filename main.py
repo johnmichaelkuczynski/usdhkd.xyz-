@@ -1,6 +1,6 @@
-"""USD/JPY Edge — Streamlit app.
+"""USD/HKD Edge — Streamlit app.
 
-Forecasts the future probability distribution of USD/JPY using one of 13
+Forecasts the future probability distribution of USD/HKD using one of 13
 selectable pricing models, optionally adjusted by a rate-differential
 equilibrium overlay. Includes a Backtest module with single-model,
 pairwise, and all-model evaluation tabs.
@@ -16,7 +16,7 @@ import plotly.graph_objects as go
 import streamlit as st
 from plotly.subplots import make_subplots
 
-from data.eodhd_fx import fetch_usdjpy_history, latest_close, daily_log_returns
+from data.eodhd_fx import fetch_usdhkd_history, latest_close, daily_log_returns
 from data.rates import build_rate_differential
 from engine.disequilibrium_fx import (
     EquilibriumModel,
@@ -41,12 +41,12 @@ from engine.backtest import (
 )
 from engine.monte_carlo import calendar_to_trading_steps, summarize_terminals
 
-st.set_page_config(page_title="USD/JPY Edge", layout="wide")
+st.set_page_config(page_title="USD/HKD Edge", layout="wide")
 
 LIVE_HORIZONS: List[Tuple[str, int]] = [("1 week", 7), ("1 month", 30), ("3 months", 90), ("6 months", 180)]
 BACKTEST_HORIZON_LABELS = {"1w": "1 week", "2w": "2 weeks", "1m": "1 month",
                            "3m": "3 months", "6m": "6 months"}
-DEFAULT_BUCKETS = "145, 150, 155, 160"
+DEFAULT_BUCKETS = "7.78, 7.80, 7.82, 7.84"
 QS = (0.025, 0.05, 0.15, 0.25, 0.5, 0.75, 0.85, 0.95, 0.975)
 
 
@@ -56,7 +56,7 @@ QS = (0.025, 0.05, 0.15, 0.25, 0.5, 0.75, 0.85, 0.95, 0.975)
 
 @st.cache_data(ttl=60 * 60 * 6, show_spinner=False)
 def load_fx_history() -> pd.DataFrame:
-    return fetch_usdjpy_history(years=5)
+    return fetch_usdhkd_history(years=5)
 
 
 @st.cache_data(ttl=60 * 60 * 6, show_spinner=False)
@@ -200,12 +200,12 @@ def simulate_live_paths(
 # Sidebar
 # ---------------------------------------------------------------------------
 
-st.sidebar.title("USD/JPY Edge")
+st.sidebar.title("USD/HKD Edge")
 st.sidebar.caption("13-model probability forecaster + backtest module")
 
 # initialise session state defaults
 if "selected_model" not in st.session_state:
-    st.session_state["selected_model"] = "heston"
+    st.session_state["selected_model"] = "bs_rv"
 if "use_overlay" not in st.session_state:
     st.session_state["use_overlay"] = True
 
@@ -229,7 +229,7 @@ selected_model = st.sidebar.selectbox(
 use_overlay = st.sidebar.checkbox(
     "Apply rate-differential equilibrium overlay",
     key="use_overlay",
-    help="Tilts the drift toward fair value when USD/JPY is dislocated.",
+    help="Tilts the drift toward fair value when USD/HKD is dislocated.",
 )
 
 bucket_text = st.sidebar.text_input(
@@ -256,7 +256,8 @@ show_narrative = st.sidebar.checkbox(
 
 st.sidebar.markdown("---")
 st.sidebar.caption(
-    "Data: EODHD (USD/JPY) · FRED (DTB3, IRSTCB01JPM156N). Cached locally for 12 hours."
+    "Data: EODHD (USD/HKD) · FRED (DTB3 US 3m). HKD 3m rate is synthesised from "
+    "the US 3m rate under the HKMA Linked Exchange Rate System. Cached locally for 12 hours."
 )
 
 
@@ -264,12 +265,17 @@ st.sidebar.caption(
 # Load data + fit equilibrium (shared across all tabs)
 # ---------------------------------------------------------------------------
 
-st.title("USD/JPY Edge — Probability Forecasts")
+st.title("USD/HKD Edge — Probability Forecasts")
+st.caption(
+    "Note: USD/HKD is a pegged regime (HKMA convertibility band 7.75–7.85). "
+    "Stochastic-vol and jump models will produce structurally tight distributions; "
+    "treat results as relative-model comparisons rather than free-float forecasts."
+)
 
 try:
     fx = load_fx_history()
 except Exception as e:
-    st.error(f"Could not load USD/JPY history from EODHD: {e}")
+    st.error(f"Could not load USD/HKD history from EODHD: {e}")
     st.stop()
 
 try:
@@ -285,12 +291,12 @@ if rates.empty:
 fx_close = fx["close"].copy()
 fx_close.index = pd.to_datetime(fx_close.index).tz_localize(None)
 rates.index = pd.to_datetime(rates.index).tz_localize(None)
-joined = pd.concat([fx_close.rename("usdjpy"), rates["diff"].rename("diff")], axis=1).dropna()
+joined = pd.concat([fx_close.rename("usdhkd"), rates["diff"].rename("diff")], axis=1).dropna()
 if len(joined) < 250:
     st.error("Not enough overlapping FX + rate data to fit the equilibrium model.")
     st.stop()
 
-eq = fit_equilibrium(joined["usdjpy"], joined["diff"], rolling_window=252)
+eq = fit_equilibrium(joined["usdhkd"], joined["diff"], rolling_window=252)
 
 log_rets = daily_log_returns(fx).to_numpy()
 annual_drift_estimate = float(np.mean(log_rets) * TRADING_DAYS)
@@ -302,13 +308,13 @@ _h.update(np.asarray(rates["diff"].to_numpy(), dtype=np.float64).tobytes())
 _h.update(str(fx.index[-1]).encode())
 returns_hash = _h.hexdigest()[:16]
 
-with st.spinner(f"Calibrating {choice_labels[selected_model]} on USD/JPY history…"):
+with st.spinner(f"Calibrating {choice_labels[selected_model]} on USD/HKD history…"):
     cal = calibrate_pricer(selected_model, returns_key, annual_drift_estimate)
 params = cal["params"]
 
 current_spot = latest_close(fx)
 us_yield = float(rates["us_yield"].iloc[-1])
-jp_yield = float(rates["jp_yield"].iloc[-1])
+hk_yield = float(rates["hk_yield"].iloc[-1])
 rate_diff = float(rates["diff"].iloc[-1])
 
 
@@ -317,8 +323,8 @@ rate_diff = float(rates["diff"].iloc[-1])
 # ---------------------------------------------------------------------------
 
 c1, c2, c3, c4 = st.columns([1.2, 1.2, 1.3, 1.3])
-c1.metric("USD/JPY (last close)", f"{current_spot:,.3f}")
-c2.metric("US – JP 3m yield", f"{rate_diff:+.2f}%", help=f"US: {us_yield:.2f}%   JP: {jp_yield:.2f}%")
+c1.metric("USD/HKD (last close)", f"{current_spot:,.4f}")
+c2.metric("US – HK 3m yield", f"{rate_diff:+.2f}%", help=f"US: {us_yield:.2f}%   HK: {hk_yield:.2f}%")
 with c3:
     st.markdown(
         f"<div style='font-size:0.85rem;color:#666'>Equilibrium fair value</div>"
@@ -364,7 +370,7 @@ with live_tab:
                                   freq=pd.tseries.offsets.BDay())
 
     # ---------- Fan chart ----------
-    st.subheader("Probability Fan — USD/JPY forecast distribution")
+    st.subheader("Probability Fan — USD/HKD forecast distribution")
     bands = np.quantile(s_paths, QS, axis=1)
     median_path = bands[QS.index(0.5)]
 
@@ -394,7 +400,7 @@ with live_tab:
     fig_fan.add_hline(y=eq.equilibrium, line=dict(color="#10b981", width=1, dash="dash"),
                       annotation_text=f"Equilibrium {eq.equilibrium:.2f}", annotation_position="top left")
     fig_fan.update_layout(height=520, margin=dict(l=10, r=10, t=10, b=10),
-                          yaxis_title="USD/JPY", hovermode="x unified",
+                          yaxis_title="USD/HKD", hovermode="x unified",
                           legend=dict(orientation="h", yanchor="bottom", y=1.02))
     st.plotly_chart(fig_fan, use_container_width=True)
 
@@ -425,7 +431,7 @@ with live_tab:
         fig.add_vline(x=current_spot, line=dict(color="#10b981", width=1.2),
                       annotation_text=f"spot {current_spot:.2f}", annotation_position="bottom")
         fig.update_layout(height=260, margin=dict(l=10, r=10, t=10, b=10), showlegend=False,
-                          xaxis_title="USD/JPY (terminal)", bargap=0.02)
+                          xaxis_title="USD/HKD (terminal)", bargap=0.02)
         st.plotly_chart(fig, use_container_width=True)
         sc1, sc2, sc3, sc4 = st.columns(4)
         sc1.metric("Mean", f"{stats.mean:.2f}")
@@ -436,9 +442,9 @@ with live_tab:
             bdf = pd.DataFrame([{"Bucket": k, "Probability": f"{v * 100:.1f}%"} for k, v in stats.bucket_probs.items()])
             st.dataframe(bdf, use_container_width=True, hide_index=True)
             top = max(stats.bucket_probs.items(), key=lambda kv: kv[1])
-            st.caption(f"**{top[1]*100:.0f}%** probability USD/JPY {top[0]} in {stats.horizon_days} days")
+            st.caption(f"**{top[1]*100:.0f}%** probability USD/HKD {top[0]} in {stats.horizon_days} days")
         d1, d2 = st.columns(2)
-        d1.caption(f"P(JPY appreciates) = {stats.p_jpy_appreciation*100:.1f}%")
+        d1.caption(f"P(HKD strengthens) = {stats.p_hkd_appreciation*100:.1f}%")
         d2.caption(f"P(USD appreciates) = {stats.p_usd_appreciation*100:.1f}%")
 
     row = st.columns(2)
@@ -454,14 +460,14 @@ with live_tab:
     _eq_cutoff = eq.fitted.index[-1] - pd.Timedelta(days=3 * 365)
     et = eq.fitted.loc[eq.fitted.index >= _eq_cutoff].copy()
     fig_eq = make_subplots(specs=[[{"secondary_y": True}]])
-    fig_eq.add_trace(go.Scatter(x=et.index, y=et["usdjpy"], name="Actual USD/JPY",
+    fig_eq.add_trace(go.Scatter(x=et.index, y=et["usdhkd"], name="Actual USD/HKD",
                                  line=dict(color="#111827", width=1.6)), secondary_y=False)
     fig_eq.add_trace(go.Scatter(x=et.index, y=et["equilibrium"], name="Model equilibrium",
                                  line=dict(color="#10b981", width=1.4, dash="dash")), secondary_y=False)
     fig_eq.add_trace(go.Scatter(x=et.index, y=et["z"], name="z-score",
                                  line=dict(color="#ef4444", width=1.0)), secondary_y=True)
     fig_eq.add_hline(y=0, line=dict(color="#bbb", width=0.6), secondary_y=True)
-    fig_eq.update_yaxes(title_text="USD/JPY", secondary_y=False)
+    fig_eq.update_yaxes(title_text="USD/HKD", secondary_y=False)
     fig_eq.update_yaxes(title_text="z-score", secondary_y=True)
     fig_eq.update_layout(height=380, margin=dict(l=10, r=10, t=10, b=10),
                           hovermode="x unified", legend=dict(orientation="h", yanchor="bottom", y=1.02))
@@ -479,7 +485,7 @@ with live_tab:
                 st.metric(name, val, help=desc)
 
     st.caption(
-        f"Equilibrium model: USDJPY = {eq.alpha:.2f} + {eq.beta:.2f} × (US₃ₘ − JP₃ₘ).  "
+        f"Equilibrium model: USDHKD = {eq.alpha:.2f} + {eq.beta:.2f} × (US₃ₘ − HK₃ₘ).  "
         f"Residual σ = {eq.residual_std:.2f}.  "
         f"Daily mean-reversion λ = {eq.lambda_*1e4:.2f} bp/σ.  "
         f"Overlay {'on' if use_overlay else 'off'}."
@@ -497,14 +503,14 @@ with live_tab:
                 import anthropic
                 facts = {
                     "model": choice_labels[selected_model],
-                    "spot": current_spot, "us_yield": us_yield, "jp_yield": jp_yield,
+                    "spot": current_spot, "us_yield": us_yield, "hk_yield": hk_yield,
                     "rate_diff": rate_diff, "equilibrium": eq.equilibrium,
                     "z_score": eq.z_score, "lambda_daily": eq.lambda_,
                     "params": params,
                     "horizons": [
                         {"label": label, "days": s.horizon_days, "median": s.median,
                          "p05": s.p05, "p95": s.p95,
-                         "p_jpy_appreciation": s.p_jpy_appreciation, "buckets": s.bucket_probs}
+                         "p_hkd_appreciation": s.p_hkd_appreciation, "buckets": s.bucket_probs}
                         for label, s in horizon_stats
                     ],
                 }
@@ -514,7 +520,7 @@ with live_tab:
                         model="claude-3-5-sonnet-latest", max_tokens=600,
                         messages=[{"role": "user", "content": (
                             "You are an FX strategist. Write a concise, neutral interpretation "
-                            "(max 200 words) of this USD/JPY forecast. Reference the active model, "
+                            "(max 200 words) of this USD/HKD forecast. Reference the active model, "
                             "the equilibrium z-score and the multi-horizon distribution. "
                             "Do not give trading advice. Facts (JSON): " + str(facts)
                         )}],
@@ -582,7 +588,7 @@ with backtest_tab:
         hi = float(max(forecasts["realised"].max(), forecasts["median"].max()))
         fig.add_trace(go.Scatter(x=[lo, hi], y=[lo, hi], mode="lines", showlegend=False,
                                   line=dict(color="#888", dash="dash")))
-        fig.update_layout(title=title, xaxis_title="Realised USD/JPY",
+        fig.update_layout(title=title, xaxis_title="Realised USD/HKD",
                           yaxis_title="Predicted median",
                           height=380, margin=dict(l=10, r=10, t=40, b=10))
         return fig
@@ -611,7 +617,7 @@ with backtest_tab:
                                   line=dict(color=color, width=1.8),
                                   name=f"{model_label} median ({BACKTEST_HORIZON_LABELS[h]})"))
         fig.update_layout(height=380, margin=dict(l=10, r=10, t=10, b=10),
-                          xaxis_title=None, yaxis_title="USD/JPY",
+                          xaxis_title=None, yaxis_title="USD/HKD",
                           hovermode="x unified",
                           legend=dict(orientation="h", yanchor="bottom", y=1.02))
         return fig
@@ -816,7 +822,7 @@ with backtest_tab:
                     fig.add_trace(go.Scatter(x=sub["target_date"], y=sub["median"], mode="lines",
                                               line=dict(color=color, width=1.6), name=f"{label} median"))
                 fig.update_layout(height=400, margin=dict(l=10, r=10, t=10, b=10),
-                                   yaxis_title="USD/JPY", hovermode="x unified",
+                                   yaxis_title="USD/HKD", hovermode="x unified",
                                    legend=dict(orientation="h", yanchor="bottom", y=1.02))
                 st.plotly_chart(fig, use_container_width=True)
 

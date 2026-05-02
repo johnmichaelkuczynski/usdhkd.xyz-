@@ -23,7 +23,7 @@ class HorizonStats:
     p75: float
     p95: float
     bucket_probs: Dict[str, float]
-    p_jpy_appreciation: float
+    p_hkd_appreciation: float
     p_usd_appreciation: float
 
 
@@ -124,7 +124,7 @@ def summarize_terminals(
         p75=float(np.percentile(terminals, 75)),
         p95=float(np.percentile(terminals, 95)),
         bucket_probs=bucket_probs,
-        p_jpy_appreciation=float(np.mean(terminals < s0)),
+        p_hkd_appreciation=float(np.mean(terminals < s0)),
         p_usd_appreciation=float(np.mean(terminals > s0)),
     )
 

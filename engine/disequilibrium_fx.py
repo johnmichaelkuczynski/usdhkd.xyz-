@@ -1,6 +1,6 @@
-"""Rate-differential equilibrium model for USD/JPY.
+"""Rate-differential equilibrium model for USD/HKD.
 
-equilibrium_rate = baseline + beta * (US_3m_yield - JP_3m_yield)
+equilibrium_rate = baseline + beta * (US_3m_yield - HK_3m_yield)
 
 Fits baseline (alpha) and beta via OLS on aligned daily history. Computes the
 rolling residual standard deviation, the current z-score, and an estimate of
@@ -23,7 +23,7 @@ class EquilibriumModel:
     lambda_: float         # daily mean-reversion strength on z (per-day fraction)
     z_score: float         # current z-score
     equilibrium: float     # current equilibrium fair value
-    fitted: pd.DataFrame   # date-indexed DataFrame with usdjpy, diff, equilibrium, residual, z
+    fitted: pd.DataFrame   # date-indexed DataFrame with usdhkd, diff, equilibrium, residual, z
 
     def zscore_at(self, when: pd.Timestamp) -> float:
         """Return the band z-score at (or just before) `when`."""
@@ -40,12 +40,12 @@ def fit_equilibrium(
     rolling_window: int = 252,
 ) -> EquilibriumModel:
     """Fit alpha, beta on the joined sample. Compute z-score and lambda."""
-    df = pd.concat([fx_close.rename("usdjpy"), rate_diff.rename("diff")], axis=1).dropna()
+    df = pd.concat([fx_close.rename("usdhkd"), rate_diff.rename("diff")], axis=1).dropna()
     if len(df) < 60:
         raise RuntimeError("Not enough overlapping data to fit equilibrium model.")
 
     x = df["diff"].to_numpy()
-    y = df["usdjpy"].to_numpy()
+    y = df["usdhkd"].to_numpy()
 
     # OLS y = alpha + beta * x
     X = np.column_stack([np.ones_like(x), x])
@@ -54,7 +54,7 @@ def fit_equilibrium(
     beta = float(beta_vec[1])
 
     df["equilibrium"] = alpha + beta * df["diff"]
-    df["residual"] = df["usdjpy"] - df["equilibrium"]
+    df["residual"] = df["usdhkd"] - df["equilibrium"]
 
     # rolling residual std
     rstd = df["residual"].rolling(rolling_window, min_periods=60).std()
@@ -66,7 +66,7 @@ def fit_equilibrium(
     last_eq = float(df["equilibrium"].iloc[-1])
 
     # Estimate lambda from regression of next-day log return on z
-    log_ret = np.log(df["usdjpy"]).diff().shift(-1)  # next-day return
+    log_ret = np.log(df["usdhkd"]).diff().shift(-1)  # next-day return
     reg = pd.concat([df["z"], log_ret.rename("ret_next")], axis=1).dropna()
     if len(reg) >= 100:
         zx = reg["z"].to_numpy()
