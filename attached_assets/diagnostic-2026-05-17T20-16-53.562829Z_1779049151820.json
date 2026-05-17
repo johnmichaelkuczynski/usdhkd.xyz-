@@ -1,0 +1,842 @@
+{
+  "ok": false,
+  "runAt": "2026-05-17T20:16:53.562829Z",
+  "totals": {
+    "pass": 21,
+    "fail": 1,
+    "skip": 0
+  },
+  "checks": [
+    {
+      "name": "Environment: EODHD present",
+      "group": "system",
+      "status": "pass",
+      "ms": 1,
+      "info": "length=23 chars (value redacted)",
+      "evidence": [
+        {
+          "kind": "assertion",
+          "label": "os.environ['EODHD'] is non-empty",
+          "value": {
+            "present": true,
+            "length": 23
+          }
+        }
+      ]
+    },
+    {
+      "name": "Environment: ANTHROPIC present",
+      "group": "system",
+      "status": "pass",
+      "ms": 0,
+      "info": "length=108 chars (value redacted)",
+      "evidence": [
+        {
+          "kind": "assertion",
+          "label": "os.environ['ANTHROPIC'] is non-empty",
+          "value": {
+            "present": true,
+            "length": 108
+          }
+        }
+      ]
+    },
+    {
+      "name": "Environment: POLYGON present",
+      "group": "system",
+      "status": "pass",
+      "ms": 0,
+      "info": "length=32 chars (value redacted)",
+      "evidence": [
+        {
+          "kind": "assertion",
+          "label": "os.environ['POLYGON'] is non-empty",
+          "value": {
+            "present": true,
+            "length": 32
+          }
+        }
+      ]
+    },
+    {
+      "name": "Storage: cache directory writable",
+      "group": "system",
+      "status": "pass",
+      "ms": 0,
+      "info": "writable at /home/runner/workspace/cache",
+      "evidence": [
+        {
+          "kind": "output",
+          "label": "cache dir",
+          "value": "/home/runner/workspace/cache"
+        }
+      ]
+    },
+    {
+      "name": "Data: USD/HKD history fetch (EODHD)",
+      "group": "system",
+      "status": "pass",
+      "ms": 1542,
+      "info": "1375 rows, last close 7.8304 on 2026-05-15",
+      "evidence": [
+        {
+          "kind": "output",
+          "label": "rows",
+          "value": 1375
+        },
+        {
+          "kind": "output",
+          "label": "last_date",
+          "value": "2026-05-15 00:00:00"
+        },
+        {
+          "kind": "output",
+          "label": "last_close",
+          "value": 7.8304
+        },
+        {
+          "kind": "assertion",
+          "label": "last_close in [7.70, 7.90]",
+          "value": {
+            "ok": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "Data: US/HK rate differential (FRED + LERS synthetic)",
+      "group": "system",
+      "status": "pass",
+      "ms": 208,
+      "info": "18083 rows, last diff +0.33% on 2026-05-14",
+      "evidence": [
+        {
+          "kind": "output",
+          "label": "rows",
+          "value": 18083
+        },
+        {
+          "kind": "output",
+          "label": "last_date",
+          "value": "2026-05-14 00:00:00"
+        },
+        {
+          "kind": "output",
+          "label": "last_diff_pct",
+          "value": 0.32966529207021766
+        },
+        {
+          "kind": "assertion",
+          "label": "diff finite",
+          "value": {
+            "ok": "True"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Model: disequilibrium equilibrium fit",
+      "group": "system",
+      "status": "fail",
+      "ms": 658,
+      "info": "'EquilibriumModel' object has no attribute 'residual_sigma'",
+      "evidence": [
+        {
+          "kind": "error",
+          "label": "exception",
+          "value": "'EquilibriumModel' object has no attribute 'residual_sigma'"
+        }
+      ]
+    },
+    {
+      "name": "Pricer: heston calibrate + simulate",
+      "group": "functional",
+      "status": "pass",
+      "ms": 102499,
+      "info": "calibrated in 102476ms, sim 3ms, median 7.8310",
+      "evidence": [
+        {
+          "kind": "output",
+          "label": "calibration ms",
+          "value": 102476
+        },
+        {
+          "kind": "output",
+          "label": "simulation ms",
+          "value": 3
+        },
+        {
+          "kind": "output",
+          "label": "paths shape (steps+1, paths)",
+          "value": [
+            11,
+            200
+          ]
+        },
+        {
+          "kind": "output",
+          "label": "median terminal",
+          "value": 7.830952710533338
+        },
+        {
+          "kind": "output",
+          "label": "fraction finite terminals",
+          "value": 1.0
+        },
+        {
+          "kind": "output",
+          "label": "param keys",
+          "value": [
+            "kappa",
+            "theta",
+            "xi",
+            "rho",
+            "v0"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Pricer: bates calibrate + simulate",
+      "group": "functional",
+      "status": "pass",
+      "ms": 93451,
+      "info": "calibrated in 93433ms, sim 1ms, median 7.8305",
+      "evidence": [
+        {
+          "kind": "output",
+          "label": "calibration ms",
+          "value": 93433
+        },
+        {
+          "kind": "output",
+          "label": "simulation ms",
+          "value": 1
+        },
+        {
+          "kind": "output",
+          "label": "paths shape (steps+1, paths)",
+          "value": [
+            11,
+            200
+          ]
+        },
+        {
+          "kind": "output",
+          "label": "median terminal",
+          "value": 7.830537512948029
+        },
+        {
+          "kind": "output",
+          "label": "fraction finite terminals",
+          "value": 1.0
+        },
+        {
+          "kind": "output",
+          "label": "param keys",
+          "value": [
+            "kappa",
+            "theta",
+            "xi",
+            "rho",
+            "v0",
+            "lambda",
+            "mu_jump",
+            "sigma_jump"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Pricer: svjj calibrate + simulate",
+      "group": "functional",
+      "status": "pass",
+      "ms": 88449,
+      "info": "calibrated in 88442ms, sim 0ms, median 7.8325",
+      "evidence": [
+        {
+          "kind": "output",
+          "label": "calibration ms",
+          "value": 88442
+        },
+        {
+          "kind": "output",
+          "label": "simulation ms",
+          "value": 0
+        },
+        {
+          "kind": "output",
+          "label": "paths shape (steps+1, paths)",
+          "value": [
+            11,
+            200
+          ]
+        },
+        {
+          "kind": "output",
+          "label": "median terminal",
+          "value": 7.832489578274806
+        },
+        {
+          "kind": "output",
+          "label": "fraction finite terminals",
+          "value": 1.0
+        },
+        {
+          "kind": "output",
+          "label": "param keys",
+          "value": [
+            "kappa",
+            "theta",
+            "xi",
+            "rho",
+            "v0",
+            "lambda",
+            "mu_jump",
+            "sigma_jump",
+            "mu_v_jump",
+            "rho_j"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Pricer: merton_jd calibrate + simulate",
+      "group": "functional",
+      "status": "pass",
+      "ms": 297,
+      "info": "calibrated in 293ms, sim 0ms, median 7.8292",
+      "evidence": [
+        {
+          "kind": "output",
+          "label": "calibration ms",
+          "value": 293
+        },
+        {
+          "kind": "output",
+          "label": "simulation ms",
+          "value": 0
+        },
+        {
+          "kind": "output",
+          "label": "paths shape (steps+1, paths)",
+          "value": [
+            11,
+            200
+          ]
+        },
+        {
+          "kind": "output",
+          "label": "median terminal",
+          "value": 7.829245205210777
+        },
+        {
+          "kind": "output",
+          "label": "fraction finite terminals",
+          "value": 1.0
+        },
+        {
+          "kind": "output",
+          "label": "param keys",
+          "value": [
+            "sigma",
+            "lambda",
+            "mu_jump",
+            "sigma_jump"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Pricer: kou_jd calibrate + simulate",
+      "group": "functional",
+      "status": "pass",
+      "ms": 660,
+      "info": "calibrated in 655ms, sim 0ms, median 7.8247",
+      "evidence": [
+        {
+          "kind": "output",
+          "label": "calibration ms",
+          "value": 655
+        },
+        {
+          "kind": "output",
+          "label": "simulation ms",
+          "value": 0
+        },
+        {
+          "kind": "output",
+          "label": "paths shape (steps+1, paths)",
+          "value": [
+            11,
+            200
+          ]
+        },
+        {
+          "kind": "output",
+          "label": "median terminal",
+          "value": 7.824691913857149
+        },
+        {
+          "kind": "output",
+          "label": "fraction finite terminals",
+          "value": 1.0
+        },
+        {
+          "kind": "output",
+          "label": "param keys",
+          "value": [
+            "sigma",
+            "lambda",
+            "p",
+            "eta1",
+            "eta2"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Pricer: vg calibrate + simulate",
+      "group": "functional",
+      "status": "pass",
+      "ms": 4,
+      "info": "calibrated in 0ms, sim 0ms, median 7.8305",
+      "evidence": [
+        {
+          "kind": "output",
+          "label": "calibration ms",
+          "value": 0
+        },
+        {
+          "kind": "output",
+          "label": "simulation ms",
+          "value": 0
+        },
+        {
+          "kind": "output",
+          "label": "paths shape (steps+1, paths)",
+          "value": [
+            11,
+            200
+          ]
+        },
+        {
+          "kind": "output",
+          "label": "median terminal",
+          "value": 7.830475531226716
+        },
+        {
+          "kind": "output",
+          "label": "fraction finite terminals",
+          "value": 1.0
+        },
+        {
+          "kind": "output",
+          "label": "param keys",
+          "value": [
+            "sigma",
+            "theta",
+            "nu"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Pricer: cgmy calibrate + simulate",
+      "group": "functional",
+      "status": "pass",
+      "ms": 3,
+      "info": "calibrated in 1ms, sim 0ms, median 7.8292",
+      "evidence": [
+        {
+          "kind": "output",
+          "label": "calibration ms",
+          "value": 1
+        },
+        {
+          "kind": "output",
+          "label": "simulation ms",
+          "value": 0
+        },
+        {
+          "kind": "output",
+          "label": "paths shape (steps+1, paths)",
+          "value": [
+            11,
+            200
+          ]
+        },
+        {
+          "kind": "output",
+          "label": "median terminal",
+          "value": 7.829164700750869
+        },
+        {
+          "kind": "output",
+          "label": "fraction finite terminals",
+          "value": 1.0
+        },
+        {
+          "kind": "output",
+          "label": "param keys",
+          "value": [
+            "C",
+            "G",
+            "M",
+            "Y"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Pricer: nig calibrate + simulate",
+      "group": "functional",
+      "status": "pass",
+      "ms": 202,
+      "info": "calibrated in 199ms, sim 0ms, median 7.8287",
+      "evidence": [
+        {
+          "kind": "output",
+          "label": "calibration ms",
+          "value": 199
+        },
+        {
+          "kind": "output",
+          "label": "simulation ms",
+          "value": 0
+        },
+        {
+          "kind": "output",
+          "label": "paths shape (steps+1, paths)",
+          "value": [
+            11,
+            200
+          ]
+        },
+        {
+          "kind": "output",
+          "label": "median terminal",
+          "value": 7.8287031773197215
+        },
+        {
+          "kind": "output",
+          "label": "fraction finite terminals",
+          "value": 1.0
+        },
+        {
+          "kind": "output",
+          "label": "param keys",
+          "value": [
+            "alpha",
+            "beta",
+            "delta",
+            "mu"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Pricer: sabr calibrate + simulate",
+      "group": "functional",
+      "status": "pass",
+      "ms": 19,
+      "info": "calibrated in 15ms, sim 0ms, median 7.8304",
+      "evidence": [
+        {
+          "kind": "output",
+          "label": "calibration ms",
+          "value": 15
+        },
+        {
+          "kind": "output",
+          "label": "simulation ms",
+          "value": 0
+        },
+        {
+          "kind": "output",
+          "label": "paths shape (steps+1, paths)",
+          "value": [
+            11,
+            200
+          ]
+        },
+        {
+          "kind": "output",
+          "label": "median terminal",
+          "value": 7.83043232913796
+        },
+        {
+          "kind": "output",
+          "label": "fraction finite terminals",
+          "value": 1.0
+        },
+        {
+          "kind": "output",
+          "label": "param keys",
+          "value": [
+            "alpha",
+            "nu",
+            "rho",
+            "beta"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Pricer: double_heston calibrate + simulate",
+      "group": "functional",
+      "status": "pass",
+      "ms": 3,
+      "info": "calibrated in 0ms, sim 0ms, median 7.8332",
+      "evidence": [
+        {
+          "kind": "output",
+          "label": "calibration ms",
+          "value": 0
+        },
+        {
+          "kind": "output",
+          "label": "simulation ms",
+          "value": 0
+        },
+        {
+          "kind": "output",
+          "label": "paths shape (steps+1, paths)",
+          "value": [
+            11,
+            200
+          ]
+        },
+        {
+          "kind": "output",
+          "label": "median terminal",
+          "value": 7.833194646322458
+        },
+        {
+          "kind": "output",
+          "label": "fraction finite terminals",
+          "value": 1.0
+        },
+        {
+          "kind": "output",
+          "label": "param keys",
+          "value": [
+            "kappa1",
+            "theta1",
+            "xi1",
+            "rho1",
+            "v0_1",
+            "kappa2",
+            "theta2",
+            "xi2",
+            "rho2",
+            "v0_2"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Pricer: rough_heston calibrate + simulate",
+      "group": "functional",
+      "status": "pass",
+      "ms": 3,
+      "info": "calibrated in 0ms, sim 0ms, median 7.8326",
+      "evidence": [
+        {
+          "kind": "output",
+          "label": "calibration ms",
+          "value": 0
+        },
+        {
+          "kind": "output",
+          "label": "simulation ms",
+          "value": 0
+        },
+        {
+          "kind": "output",
+          "label": "paths shape (steps+1, paths)",
+          "value": [
+            11,
+            200
+          ]
+        },
+        {
+          "kind": "output",
+          "label": "median terminal",
+          "value": 7.832561153861116
+        },
+        {
+          "kind": "output",
+          "label": "fraction finite terminals",
+          "value": 1.0
+        },
+        {
+          "kind": "output",
+          "label": "param keys",
+          "value": [
+            "xi0",
+            "eta",
+            "rho",
+            "H"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Pricer: bs_rv calibrate + simulate",
+      "group": "functional",
+      "status": "pass",
+      "ms": 2,
+      "info": "calibrated in 0ms, sim 0ms, median 7.8289",
+      "evidence": [
+        {
+          "kind": "output",
+          "label": "calibration ms",
+          "value": 0
+        },
+        {
+          "kind": "output",
+          "label": "simulation ms",
+          "value": 0
+        },
+        {
+          "kind": "output",
+          "label": "paths shape (steps+1, paths)",
+          "value": [
+            11,
+            200
+          ]
+        },
+        {
+          "kind": "output",
+          "label": "median terminal",
+          "value": 7.828930316027399
+        },
+        {
+          "kind": "output",
+          "label": "fraction finite terminals",
+          "value": 1.0
+        },
+        {
+          "kind": "output",
+          "label": "param keys",
+          "value": [
+            "sigma",
+            "window"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Pricer: bs_garch calibrate + simulate",
+      "group": "functional",
+      "status": "pass",
+      "ms": 152,
+      "info": "calibrated in 149ms, sim 0ms, median 7.8298",
+      "evidence": [
+        {
+          "kind": "output",
+          "label": "calibration ms",
+          "value": 149
+        },
+        {
+          "kind": "output",
+          "label": "simulation ms",
+          "value": 0
+        },
+        {
+          "kind": "output",
+          "label": "paths shape (steps+1, paths)",
+          "value": [
+            11,
+            200
+          ]
+        },
+        {
+          "kind": "output",
+          "label": "median terminal",
+          "value": 7.829762970507483
+        },
+        {
+          "kind": "output",
+          "label": "fraction finite terminals",
+          "value": 1.0
+        },
+        {
+          "kind": "output",
+          "label": "param keys",
+          "value": [
+            "omega",
+            "alpha",
+            "beta",
+            "sigma_initial",
+            "sigma_long_run"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Backtest: smoke (bs_rv, 1y, 200 paths)",
+      "group": "functional",
+      "status": "pass",
+      "ms": 62,
+      "info": "30 forecasts in 0.0s, CRPS=0.01209",
+      "evidence": [
+        {
+          "kind": "output",
+          "label": "elapsed s",
+          "value": 0.03
+        },
+        {
+          "kind": "output",
+          "label": "n forecasts evaluated",
+          "value": 30
+        },
+        {
+          "kind": "output",
+          "label": "pooled CRPS",
+          "value": 0.012089303395510585
+        },
+        {
+          "kind": "output",
+          "label": "overall keys",
+          "value": [
+            "n",
+            "crps",
+            "log_score",
+            "cov70",
+            "cov95",
+            "mae_median",
+            "mae_mean",
+            "calibration_err",
+            "bias"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "AI: Anthropic Claude live ping",
+      "group": "functional",
+      "status": "pass",
+      "ms": 2298,
+      "info": "2298ms \u00b7 response=DIAGNOSTIC_OK",
+      "evidence": [
+        {
+          "kind": "output",
+          "label": "round-trip ms",
+          "value": 2298
+        },
+        {
+          "kind": "output",
+          "label": "response",
+          "value": "DIAGNOSTIC_OK"
+        },
+        {
+          "kind": "output",
+          "label": "model echoed",
+          "value": "claude-opus-4-5-20251101"
+        }
+      ]
+    }
+  ]
+}

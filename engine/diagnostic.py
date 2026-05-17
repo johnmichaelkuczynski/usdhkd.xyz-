@@ -164,13 +164,13 @@ def _check_equilibrium() -> tuple[str, str, list[dict]]:
     eq = fit_equilibrium(joined["usdhkd"], joined["diff"], rolling_window=252)
     fields = {
         "alpha": float(eq.alpha), "beta": float(eq.beta),
-        "residual_sigma": float(eq.residual_sigma),
+        "residual_std": float(eq.residual_std),
         "lambda_per_day": float(eq.lambda_),
         "z_score": float(eq.z_score),
         "equilibrium": float(eq.equilibrium),
     }
     finite = all(np.isfinite(v) for v in fields.values())
-    plausible = (7.6 <= fields["alpha"] <= 8.0) and fields["residual_sigma"] > 0
+    plausible = (7.6 <= fields["alpha"] <= 8.0) and fields["residual_std"] > 0
     ev = [
         {"kind": "output", "label": "fit", "value": fields},
         {"kind": "assertion", "label": "all finite", "value": {"ok": finite}},
@@ -180,7 +180,7 @@ def _check_equilibrium() -> tuple[str, str, list[dict]]:
     if not (finite and plausible):
         return "fail", f"finite={finite} plausible={plausible}", ev
     return "pass", (f"α={fields['alpha']:.3f} β={fields['beta']:.3f} "
-                    f"σ={fields['residual_sigma']:.4f}"), ev
+                    f"σ={fields['residual_std']:.4f}"), ev
 
 
 def _check_pricer(model_name: str) -> tuple[str, str, list[dict]]:
