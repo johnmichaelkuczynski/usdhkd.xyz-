@@ -1,0 +1,476 @@
+Build a synthetic user agent ("R1") that beta-tests USD/HKD Edge end-to-end. R1 must produce raw, reviewable evidence of every interaction — not pass/fail summaries.
+NON-NEGOTIABLE REQUIREMENTS (read first)
+These are the parts a previous synthetic-user build for a different app failed on. If any are missing, the deliverable is rejected.
+
+No green-checkmark theater. R1 produces raw evidence, not "PASS." Exact controls R1 manipulated, exact numeric outputs the app produced, exact screenshots. Judge produces prose critique, not booleans. PASS/FAIL exists only as a filter for failures.md — never as a substitute for evidence.
+The HTML report must be reviewable in under 30 minutes. Every interaction shows step + R1's parameter choices + app's response (tables, chart screenshots, summary metrics) + judge critique. No collapsed sections.
+The live view must show R1's actual interactions and the app's actual outputs as they happen — not "Step 4 of N in progress." Spec below.
+All numeric outputs captured. For every backtest run, every forecast view, R1 saves the exact numbers (CRPS, log score, coverage, DM p-values, horizon p5/p50/p95, bucket probabilities) to disk as structured JSON.
+Three screenshots per interactive step (before / after parameter change / after computation completes). Navigation-only steps get one.
+If R1 cannot complete a step, the failure is logged with the actual error message, screenshot, and any visible stderr from the Streamlit app. No skipping and marking green.
+Per-step verification is mathematical, not just structural. When R1 reads a forecast table, R1 verifies the numbers themselves are sane (probabilities sum to 1±0.01, quantiles are monotonic, the median sits between p25 and p75, etc.). Just rendering numbers is not sufficient evidence the computation is correct.
+
+What's different about this app — USD/HKD Edge's defining features
+This is the most mathematically substantive app in your suite. It's a Streamlit-based quantitative finance tool, not a chat or content app. Six things make it fundamentally different from previous R1 targets:
+It's Streamlit, not React. Selectors work very differently. Streamlit elements have specific DOM patterns ([data-testid="stSelectbox"], [data-testid="stSlider"], [data-testid="stButton"], [data-testid="stDataFrame"]). R1 needs to learn Streamlit conventions, not React testid conventions. The agent must inspect the running app to find selectors — guessing will not work.
+There's no LLM in the core flow. The pricers are pure numerics (Monte Carlo, particle filters, MLE). Anthropic Claude is only the optional narrative summary. The judge is therefore evaluating mathematical/statistical correctness, not generative quality. The judge prompt must be tuned for this — it needs to reason like a quant, not a writing critic.
+Results are deterministic-ish (with seed). The same inputs should produce the same outputs across runs (assuming seed=42 is hardcoded per blueprint). R1 can verify reproducibility by running the same backtest twice and confirming identical numbers.
+There's a documented scope limitation about in-sample lookahead in the equilibrium fit (blueprint Part 10). R1 doesn't test the math behind this, but R1 verifies the overlay-on vs overlay-off comparison still works as a relative comparison — that's the supported use case.
+The DM p-value matrix is the flagship comparison output. Across 13 models, this produces a 13×13 matrix. R1 verifies its mathematical properties (symmetric, NaN diagonal, p-values in [0,1]) and reasonableness.
+Caching is aggressive (12h parquet + st.cache_data). R1 needs to understand that repeated runs may hit cache, and that the second time R1 clicks "Run backtest" with identical parameters, it should be near-instantaneous. This itself is testable.
+The seven invariants that elevate to CRITICAL VIOLATION status:
+Invariant A — Probability distributions are well-formed. For every horizon card in the Live tab, R1 reads the bucket probabilities. Across all buckets (the default 7.78/7.80/7.82/7.84 plus implicit "below" and "above"), probabilities must sum to 1.0 ± 0.01. Quantiles must be monotonic: p05 ≤ p25 ≤ p50 ≤ p75 ≤ p95. P(HKD strengthens) + P(USD appreciates) should equal approximately 1.0 (allowing for the boundary case where USD/HKD is exactly the current spot). If any of these fail, CRITICAL VIOLATION — the core probabilistic output is malformed.
+Invariant B — All 13 pricers run without crashing. R1 cycles through every model in the dropdown (heston, bates, svjj, merton_jd, kou_jd, vg, cgmy, nig, sabr, double_heston, rough_heston, bs_rv, bs_garch) and triggers a live forecast for each. Every model must:
+
+Complete within its documented runtime range (per blueprint Part 9, with 2× tolerance)
+Produce a fan chart, 4 horizon cards, and parameter panel
+Not raise a Python exception visible in the Streamlit UI
+
+If any pricer crashes, hangs beyond timeout, or fails to render outputs, CRITICAL VIOLATION for that pricer.
+Invariant C — Determinism with seed. R1 runs a backtest with specific parameters. Records summary metrics. Triggers re-run with same parameters (forcing cache miss by changing a non-affecting parameter and back — or just deleting the relevant cache file if filesystem access is available). Expects either:
+
+Identical results (cache hit — instantaneous)
+Identical results re-computed (deterministic re-run)
+
+Numeric drift between two runs with the same seed and parameters indicates non-determinism somewhere: CRITICAL VIOLATION.
+Invariant D — DM p-value matrix mathematical sanity. After running the all-model backtest:
+
+The matrix must be 13×13 (or N×N where N is the number of selected models)
+Diagonal must be NaN (a model can't be DM-tested against itself)
+Off-diagonal entries must be in [0, 1] (valid p-values)
+Matrix should be approximately symmetric: p(A,B) ≈ p(B,A) since DM is two-sided (allowing small numerical asymmetry)
+The ranked-best model from the ranking table should NOT have a DM p-value of 1.0 against every other model (would indicate the comparison is broken)
+
+If any of these mathematical properties fail, CRITICAL VIOLATION.
+Invariant E — Overlay toggle changes results. R1 runs a backtest with overlay=on, saves results. Switches overlay=off, re-runs with otherwise identical parameters. Results must differ — the overlay isn't documented as a no-op. If overlay-on and overlay-off produce byte-identical CRPS/log-score/median results, the toggle is broken: CRITICAL VIOLATION.
+Invariant F — Coverage diagnostics are calibrated within tolerance. For each single-model backtest, the 70% coverage and 95% coverage metrics from the summary should be within a reasonable band of their nominal values (e.g., 70% coverage should be in [50%, 90%] — wide but not pathological; 95% coverage should be in [80%, 100%]). The calibration verdict ("WELL-CALIBRATED" / "PARTIALLY" / "BIASED" / etc.) should be consistent with the observed numbers. If the verdict says "WELL-CALIBRATED" but coverage is 0.30 at the 70% level, the verdict logic is broken: CRITICAL VIOLATION.
+Invariant G — Cache hit on identical re-run. Per blueprint Part 9, "Identical backtest inputs hit the SHA1-keyed cache and return effectively instantly." R1 runs a backtest, notes wall-clock time. Re-runs same parameters. Second run should be under 2 seconds (cache hit). If second run takes substantially longer (more than 30% of first run time, indicating cache miss), caching is broken: CRITICAL VIOLATION.
+Architecture
+
+Browser automation: Playwright (Node, single-file tools/r1/run.mjs). Standalone Node project, not in any workspace.
+R1's brain: Anthropic API. Model: claude-opus-4-7. Key in ANTHROPIC_API_KEY.
+Judge: Separate Claude API call per interaction. Prose critique with quant-aware prompt — judge needs to know what CRPS, log score, coverage, and DM p-values mean. Judge prompt explicitly states: "Evaluate as a quantitative analyst would. Are the numbers internally consistent? Do the rankings make statistical sense? Is the calibration verdict justified by the coverage numbers?"
+Live view: node:http server on port 7777. Zero extra deps.
+Target app: USD/HKD Edge running locally. Default APP_URL=http://localhost:5000 (Streamlit default port per blueprint workflow command).
+No authentication. Single-user local app per blueprint.
+
+Streamlit-specific considerations
+The agent should know:
+
+Streamlit reruns the entire script on every interaction. R1 must wait for [data-testid="stSpinner"] to disappear before considering an interaction complete.
+The "Run" buttons trigger long-running computations. R1 must wait for the result containers to populate, not just for button click.
+DataFrames render as [data-testid="stDataFrame"] with embedded <table> elements. R1 reads tables via standard DOM querying.
+Plotly charts render as [data-testid="stPlotlyChart"] — screenshots are sufficient for evidence; R1 doesn't try to parse SVG numerically.
+The sidebar may collapse on narrow viewports. Run in headless mode at 1920×1080 (set via Playwright viewport).
+Streamlit's st.cache_data is process-local. Cache survives within a Streamlit session but cold-start clears it. R1's harness should NOT restart the Streamlit server during a run.
+
+Live view
+Top panel: current step + R1's parameter choices + URL + latest screenshot (refresh 2s).
+Middle panel: most recent app response (parsed table values, chart screenshots, summary metric extractions), recent Streamlit reruns observed, judge critique, plus a dedicated "Quant State" panel showing:
+
+Active model
+Current tab (Live / Backtest single / Backtest pairwise / Backtest all)
+Overlay state (on/off)
+Last forecast: model, P(HKD strengthens) at each horizon
+Last backtest: model, window, CRPS, coverage 70/95, verdict
+Invariant check status for the most recent interaction
+
+For all-model backtest, sub-panel shows model-by-model progress as the ranking table populates.
+Bottom panel: reverse-chronological completed-interaction log.
+After exit: "RUN COMPLETE" with link to report.html. Kept open 60s.
+What R1 is testing — the functions
+Function 1 — App startup and initial state
+
+Navigate to APP_URL.
+Wait for app to fully load (no spinner, sidebar visible).
+Capture screenshot.
+Verify status bar shows: last close, US-HK 3m yield, equilibrium fair value, z-score, active model caption.
+Verify all five status fields display reasonable values:
+
+USD/HKD last close: between 7.70 and 7.90 (the peg band ±)
+US-HK 3m yield: between -2% and +6%
+Equilibrium fair value: between 7.70 and 7.90
+Z-score: numeric (typically -3 to +3)
+
+
+If status bar shows NaN, error, or wildly out-of-range values, CRITICAL VIOLATION.
+
+Function 2 — Sidebar inspection
+
+Verify all sidebar controls present per blueprint:
+
+Active model dropdown with 13 options
+Number of paths slider
+Horizon (months) slider
+Custom price buckets text input
+Apply rate-differential equilibrium overlay checkbox
+AI narrative summary checkbox (may be disabled)
+Data caption text
+
+
+Capture initial state of each control.
+
+Function 3 — Live Forecast with default model (Invariant A)
+
+Note default model (per blueprint: bs_rv).
+Wait for live forecast to render.
+Capture:
+
+Fan chart screenshot
+All 4 horizon cards (1w / 1m / 3m / 6m) — extract p5, p50, p95, bucket probabilities, P(HKD strengthens), P(USD appreciates)
+Equilibrium tracker chart screenshot
+Equilibrium caption text (alpha, beta, residual σ, daily λ, overlay state)
+Model parameter panel
+
+
+Verify Invariant A for each horizon card:
+
+Bucket probabilities sum to 1.0 ± 0.01 (including implicit boundary buckets)
+Quantile monotonicity: p05 ≤ p25 ≤ p50 ≤ p75 ≤ p95
+P(HKD strengthens) + P(USD appreciates) ≈ 1.0 (within 0.02)
+All probabilities in [0, 1]
+
+
+Save full numeric output to outputs/live-forecasts/bs_rv.json.
+
+Function 4 — Cycle through all 13 pricers (Invariant B)
+For each of the 13 models in PRICER_ORDER:
+
+Select model from dropdown.
+Wait for Streamlit rerun (spinner appears then disappears).
+Set a generous timeout based on blueprint Part 9 runtime expectations (with 2× tolerance).
+Capture: model parameter panel, fan chart screenshot, one horizon card numeric extract.
+Verify Invariant B:
+
+Model rendered without Python exception visible in UI
+Completed within timeout
+Parameter panel populated
+Horizon cards have valid numbers (re-run Invariant A check; if it fails for this model, that's a violation specific to this model)
+
+
+Save model-specific output to outputs/live-forecasts/<model>.json.
+
+If any model throws a Python traceback visible in the UI (Streamlit displays errors inline), capture the traceback text and log as CRITICAL VIOLATION for that model.
+Function 5 — Overlay toggle (Invariant E baseline)
+
+Reset to bs_rv model.
+With overlay=on, capture horizon card numbers (already in Function 3 output).
+Toggle overlay off.
+Wait for rerun. Capture new horizon card numbers.
+Verify Invariant E:
+
+At least one of the horizon card numbers differs between overlay-on and overlay-off states
+The fan chart visibly differs (judge inspects screenshots)
+
+
+If outputs are byte-identical, CRITICAL VIOLATION.
+Toggle back to overlay=on for downstream tests.
+
+Function 6 — Equilibrium tracker numerical sanity
+
+Read equilibrium caption values: alpha, beta, residual σ, daily λ.
+Sanity checks:
+
+Alpha typically near 7.78-7.82 (close to the peg midpoint)
+Beta: any sign — judge concern only if zero or absurdly large
+Residual σ: positive, typically 0.005-0.05
+Daily λ: positive (mean-reversion rate)
+
+
+Judge inspects: do these numbers make economic sense for USD/HKD?
+
+Function 7 — Backtest: Single-model with default settings
+
+Navigate to Backtest tab → Single model sub-tab.
+Capture default configuration values.
+Select model bs_rv.
+Note current wall-clock time, click "Run single-model backtest."
+Wait for completion (timeout: 60s for fast models per blueprint; longer for heavy models).
+Note total elapsed wall-clock time.
+Capture:
+
+Verdict banner text and color
+5 metric cards: CRPS, Log score, 70% coverage, 95% coverage, MAE
+Per-horizon summary table (full numeric extract)
+Scatter plot screenshot
+Calibration plot screenshot (nominal vs empirical at 50/70/95)
+Time-series chart screenshot
+Runtime caption ("X.X s · N forecasts evaluated")
+
+
+Save full output to outputs/backtests/single/bs_rv-default.json.
+Verify Invariant F:
+
+70% coverage in [0.50, 0.90]
+95% coverage in [0.80, 1.00]
+Verdict consistent with numbers (judge call: if verdict says "WELL-CALIBRATED" but 70% coverage is 0.40, flag it)
+
+
+
+Function 8 — Determinism check (Invariant C)
+
+Run the same single-model backtest as Function 7 a second time (same parameters).
+Note elapsed time.
+Verify Invariant G (caching): second run should complete in under 2 seconds (cache hit). If significantly longer, CRITICAL VIOLATION.
+Verify Invariant C (determinism): the captured metrics must be identical to Function 7's output (CRPS, log score, coverage, all summary fields). If any numeric drift, CRITICAL VIOLATION.
+
+Function 9 — Backtest: Pairwise comparison
+
+Navigate to Pairwise comparison sub-tab.
+Select Model A = bs_rv, Model B = merton_jd.
+Click "Run pairwise comparison."
+Wait for completion.
+Capture:
+
+Winner banner text including CRPS A, CRPS B, DM p-value
+Side-by-side metrics table
+Two scatter plots
+Combined time-series chart
+
+
+Save to outputs/backtests/pairwise/bs_rv-vs-merton_jd.json.
+Mathematical sanity:
+
+DM p-value in [0, 1]
+"Winner" matches whichever model has lower CRPS
+The metrics table's "Better" column is consistent with the underlying numbers
+
+
+
+Function 10 — Backtest: All-model ranking (Invariant D — flagship)
+This is the expensive test. Skip in smoke runs.
+
+Navigate to All-model ranking sub-tab.
+Verify multiselect defaults to all 13 models. Keep all selected.
+Note start time. Click "Run all-model backtest."
+Wait for completion (this may take 5-15 minutes — set timeout to 30 min).
+Capture:
+
+Ranking table (all 13 models sorted by CRPS ascending) — full numeric extract
+DM p-value matrix (full 13×13 — extract every cell)
+Rolling-CRPS chart (one line per model)
+Total runtime
+
+
+Save to outputs/backtests/all-model/results.json.
+Verify Invariant D:
+
+Matrix is N×N where N is models actually run (skip any models that errored)
+Diagonal is NaN
+Off-diagonal in [0, 1]
+Symmetric within 0.05 tolerance (DM is two-sided, so p(A,B) and p(B,A) should be near-equal)
+The CRPS ranking ordering is consistent: the top model has the lowest CRPS
+The top model's DM p-values against weaker models are typically small (significant); if every off-diagonal p-value is exactly 1.0, the comparison is broken
+
+
+
+Function 11 — "Set as live default" button flow
+
+After Function 7, click "Set as live default."
+Wait for rerun.
+Verify the sidebar's Active model dropdown now reflects whichever model R1 backtested.
+Switch back to a different model manually to ensure the dropdown still works after the auto-set.
+
+Function 12 — Custom price buckets
+
+Change the "Custom price buckets" text input to: "7.79, 7.81, 7.83"
+Wait for live forecast to rerun.
+Capture new horizon card bucket tables.
+Verify the new buckets appear (7.79, 7.81, 7.83 boundaries visible in tables).
+Verify Invariant A still holds with the new buckets.
+
+Function 13 — Number of paths slider
+
+Change paths from 50,000 to 10,000.
+Wait for rerun.
+Verify forecast still renders.
+Capture horizon p5/p50/p95.
+Increase to 100,000 paths.
+Wait for rerun.
+Compare: with more paths, the p5/p95 estimates should be similar but more stable (Monte Carlo convergence). Drastic differences (e.g., median moves by 0.02 between 10k and 100k paths) indicate convergence issues — judge concern.
+Reset to 50,000.
+
+Function 14 — Horizon slider
+
+Change horizon from 6 months to 12 months.
+Verify the live forecast renders (fan chart extends, but the four hard-coded horizon cards may not reflect the new horizon).
+Note: blueprint says horizons in cards are 1w/1m/3m/6m — these may be hard-coded regardless of slider. Verify this matches the documented behavior.
+
+Function 15 — Data caption inspection
+
+Verify the sidebar data caption text matches blueprint: "EODHD (USD/HKD) · FRED (DTB3 US 3m). HKD 3m rate is synthesised..."
+If the caption is missing or fundamentally different, judge concern (documentation drift).
+
+Function 16 — AI Narrative Summary (if available)
+
+If the Anthropic narrative checkbox is enabled:
+
+Click to enable.
+Wait for narrative to generate.
+Capture narrative text.
+Judge concern: does narrative reference the actual horizon probabilities R1 captured? Or is it generic boilerplate?
+Blueprint requirement: "The quantitative output is the source of truth; the narrative is never substituted for the numbers." Verify the numbers are still rendered — narrative doesn't replace them.
+
+
+
+If checkbox is disabled (no ANTHROPIC key), note this and skip.
+Function 17 — Page reload / cache persistence
+
+Reload the page (Playwright page.reload()).
+Wait for app to load.
+Trigger same backtest as Function 7.
+Note completion time. Should hit cache (parquet on disk) if within 12h.
+Verify Invariant G (persistent cache): quick completion indicates cache survived page reload.
+
+Function 18 — Final state capture
+
+Across all pages and states, take final screenshots.
+Verify the app is still responsive (no zombie spinners, no crashes).
+
+R1's behavior
+For each interaction R1 picks one approach and logs the choice:
+
+Run with documented defaults (happy path)
+Probe an invariant deliberately (toggle overlay for E, re-run for C, all-model run for D)
+Vary a single parameter to verify it affects output (paths slider, horizon slider, bucket input)
+Cycle through enumerable choices (13 models for Invariant B)
+Edge cases (extreme parameter values, very short/long backtest windows)
+
+Streamlit interaction constraint: R1 manipulates sliders by computing target values and using Playwright's keyboard events on the focused slider. R1 manipulates text inputs with .fill() (not .type() — Streamlit text inputs don't need character-by-character typing for non-form-validation reasons, and .fill() is faster). R1 clicks buttons normally. After every input change, R1 waits for the spinner to disappear before proceeding.
+Per-interaction flow
+
+Navigate / verify current page state.
+Capture current control values.
+R1 brain picks approach + chooses parameter values.
+"Before" screenshot.
+Manipulate controls (slider, dropdown, text input, button click).
+"After interaction" screenshot.
+Wait for spinner to disappear AND result containers to populate.
+"After completion" screenshot.
+Extract all numeric outputs (tables, metric cards, captions) via DOM querying.
+Capture console errors (if Streamlit surfaces any errors as visible elements).
+Run invariant-specific verification:
+
+Live forecast → Invariant A (probability sanity)
+Model cycle → Invariant B (no crashes)
+Re-run with same params → Invariant C (determinism) and Invariant G (cache)
+Overlay toggle → Invariant E
+Single backtest → Invariant F (coverage)
+All-model backtest → Invariant D (matrix properties)
+
+
+Send full interaction to judge with quant-aware prompt: "Critique as a quantitative analyst. Are the numbers internally consistent? Do the rankings make statistical sense? Is the calibration verdict justified? Are quantile orderings monotonic? Anything mathematically suspect?"
+Append to transcript, update live view.
+
+Artifacts (written to tools/r1/runs/<ISO-timestamp>/)
+transcript.jsonl
+One JSON per interaction with standard fields plus, where applicable:
+
+streamlit_state: control values before/after
+numeric_outputs: full table/metric extractions (not just summaries — every cell)
+invariant_a_check: per-horizon probability/quantile sanity results
+invariant_b_check: which model + did it render
+invariant_c_check: numeric diff between repeated runs
+invariant_d_check: matrix property results (symmetry, diagonal, range)
+invariant_e_check: overlay-on vs overlay-off comparison
+invariant_f_check: coverage values + verdict consistency
+invariant_g_check: cache timing observations
+
+report.html
+Self-contained, grouped by function. Sticky TOC. Standard fields plus:
+
+Invariant-specific blocks
+Function 4 (13-pricer cycle) gets a per-model summary table with status, runtime, and quick metrics
+Function 7+8 (determinism) gets a side-by-side comparison block showing run1 vs run2 numbers
+Function 10 (all-model) gets:
+
+The ranking table embedded
+A heatmap visualization of the DM p-value matrix (R1 generates this from the captured data — a simple HTML table with color-coded cells)
+A summary of matrix properties (symmetric? diagonal NaN? all in [0,1]?)
+
+
+Chart screenshots embedded inline
+
+failures.md
+Opens with CRITICAL INVARIANT VIOLATIONS:
+
+Invariant A: probability distribution malformed (cite the specific horizon + bucket totals)
+Invariant B: pricer crashed or rendered errors (cite model + traceback if visible)
+Invariant C: determinism broken (cite the divergent values)
+Invariant D: DM matrix mathematical property failed (cite which property + matrix excerpt)
+Invariant E: overlay toggle has no effect (cite the byte-identical outputs)
+Invariant F: coverage out of band or verdict inconsistent (cite values + verdict)
+Invariant G: cache miss on identical re-run (cite timings)
+Any Python traceback visible in Streamlit UI
+Any control that fails to respond after interaction
+Any uncaught exception in R1's harness
+
+Below: judge concerns linking to report anchors, screenshots inline.
+network.log
+JSONL of HTTP requests observed. Note: Streamlit's protocol is largely WebSocket-based for state updates, so HTTP traffic is limited. Capture what's available. The substantive evidence for this app is DOM extracts and screenshots, not network traffic.
+outputs/
+
+live-forecasts/ — one JSON per model with full horizon card numbers
+backtests/single/ — full backtest results per model with all summary fields
+backtests/pairwise/ — pairwise comparison results
+backtests/all-model/ — ranking table, DM p-value matrix (as JSON), rolling-CRPS data
+screenshots/ — also for chart visual evidence
+
+console.log
+Full stdout including Streamlit server output if R1 captures it.
+screenshots/
+Numbered PNGs.
+run-summary.txt
+INTERACTIONS: N
+JUDGE CONCERNS RAISED: M
+CRITICAL INVARIANT VIOLATIONS: K
+  Invariant A (probability sanity): A
+  Invariant B (13 pricers run): B
+  Invariant C (determinism): C
+  Invariant D (DM matrix properties): D
+  Invariant E (overlay has effect): E
+  Invariant F (coverage calibration): F
+  Invariant G (cache hits): G
+PRICERS THAT CRASHED: [list]
+HARNESS SANITY FAILURES: J
+Anti-theater sanity checks
+For each interaction:
+
+R1 verified at least one numeric output (not just took a screenshot — actually parsed and stored numbers).
+Interactive: 3 screenshots, not byte-identical. Navigation-only: 1.
+judge_critique ≥ 30 words.
+For Live tab interactions: invariant_a_check populated with sum-to-1 result and quantile monotonicity result.
+For Function 4: all 13 pricers attempted, status logged for each (success or failure mode).
+For Function 10: matrix has ≥ N² - N non-NaN entries where N is number of selected models.
+
+If any fail: HARNESS SANITY FAILURES: X, exit code 3.
+Configuration
+jsconst APP_URL = process.env.APP_URL || 'http://localhost:5000';
+const OUTPUT_DIR = `./runs/${new Date().toISOString().replace(/[:.]/g,'-')}`;
+const HEADLESS = process.env.HEADLESS === 'true' || false;
+const LIVE_VIEW_PORT = parseInt(process.env.LIVE_VIEW_PORT || '7777', 10);
+const SKIP_FUNCTIONS = (process.env.SKIP_FUNCTIONS || '').split(',').filter(Boolean);
+const PRICER_TIMEOUT_MS = parseInt(process.env.PRICER_TIMEOUT_MS || '60000', 10);
+const HEAVY_PRICER_TIMEOUT_MS = parseInt(process.env.HEAVY_PRICER_TIMEOUT_MS || '180000', 10);
+const ALL_MODEL_BACKTEST_TIMEOUT_MS = parseInt(process.env.ALL_MODEL_BACKTEST_TIMEOUT_MS || '1800000', 10);
+const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || 'claude-opus-4-7';
+const VIEWPORT_WIDTH = 1920;
+const VIEWPORT_HEIGHT = 1080;
+Deliverable
+tools/r1/run.mjs + tools/r1/package.json + tools/r1/README.md. Standalone Node project, not in any workspace.
+npm start runs full plan. Smoke test: SKIP_FUNCTIONS=10 npm start (skip the all-model backtest — that's the 5-15 minute one).
+Startup banner:
+R1 is running.
+Live view:    http://localhost:7777
+Output dir:   ./runs/<timestamp>/
+Watch the live view — especially the Quant State panel.
+Do not trust summary output alone.
+Finish banner:
+R1 finished.
+Open the report:        ./runs/<...>/report.html
+Open the failures:      ./runs/<...>/failures.md
+Live forecast outputs:  ./runs/<...>/outputs/live-forecasts/
+Backtest results:       ./runs/<...>/outputs/backtests/
+Raw transcript:         ./runs/<...>/transcript.jsonl
+Exit codes: 0 clean, 1 judge concerns raised, 2 critical invariant violations, 3 harness sanity failed.
+UI selectors identified by inspecting the actual rendered Streamlit app. Streamlit uses data-testid attributes on most widgets (stSelectbox, stSlider, stButton, stDataFrame, stPlotlyChart, stSpinner, etc.) — these are the agent's friends. For specific control instances within the page, the agent uses Playwright's getByRole, getByLabel, or nth() to disambiguate.
