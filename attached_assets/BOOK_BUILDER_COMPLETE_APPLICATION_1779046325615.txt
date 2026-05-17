@@ -1,0 +1,199 @@
+BOOK BUILDER — COMPLETE APPLICATION BLUEPRINT
+
+================================================================================ PART 1: APPLICATION OVERVIEW
+Book Builder is a full-stack AI writing and analysis platform. It connects to five proprietary LLMs (ZHI 1–5) and a suite of specialised AI services to support document rewriting, cognitive profiling, humanization, text-to-speech, graph generation, AI detection, and persistent AI chat. Every feature is accessible from a single authenticated session.
+
+Stack: Frontend — React 18, TypeScript, Tailwind CSS, shadcn/ui, TanStack Query, Wouter Backend — Node.js, Express.js, TypeScript (ES Modules) Database — PostgreSQL via Drizzle ORM (Neon serverless) Build — Vite (frontend), esbuild (backend) Math — MathJax + KaTeX for LaTeX rendering
+
+Authentication: Username/password. A default test user (id: 1, username: "demo", password: "password") is seeded in MemStorage on startup. All protected routes expect req.session.userId.
+
+================================================================================ PART 2: THE 10 CORE FEATURES
+────────────────────────────────────────────────────────────────────────────── FEATURE 1 — AI CHAT (Book Builder Chat) ────────────────────────────────────────────────────────────────────────────── Location: Home page (/) — right panel Purpose: Persistent multi-conversation AI chat with document context injection, math rendering, and auxiliary chat thread.
+
+Components: client/src/pages/Home.tsx Main layout, conversation switching client/src/components/ChatWindow.tsx Main chat message display client/src/components/ChatDialogue.tsx Auxiliary chat with model selector client/src/components/ConversationList.tsx Sidebar conversation management
+
+Endpoints: GET /api/conversations List user's conversations POST /api/conversations Create new conversation (title, model) GET /api/conversations/:id Get conversation by ID DELETE /api/conversations/:id Delete conversation GET /api/conversations/:id/messages Fetch message history POST /api/conversations/:id/messages Send message, get AI reply POST /api/export-chat-message Export single message as .txt POST /api/share-chat-message Email chat message (SendGrid) POST /api/export-auxiliary-chat Export auxiliary chat thread as .txt POST /api/share-auxiliary-chat Email auxiliary chat thread
+
+Message flow: User submits text → POST /api/conversations/:id/messages → model switch (gpt4 / claude / deepseek / perplexity / grok) → LLM call → response saved to messages table → returned to client
+
+Model selector: ZHI 1 / ZHI 2 / ZHI 3 / ZHI 4 / ZHI 5 (per-conversation) Math toggle: "Text" / "Math" button — toggles KaTeX rendering in output Document context: Conversations store contextDocumentIds (JSON array) linking to uploaded documents; context injected into system prompt
+
+────────────────────────────────────────────────────────────────────────────── FEATURE 2 — DOCUMENT REWRITER (Chunked Rewriter) ────────────────────────────────────────────────────────────────────────────── Location: Home page (/) — left panel, DocumentRewriterModal; also standalone at /rewrite page (DocumentRewrite.tsx) Purpose: Upload or paste a document, split into chunks, rewrite each chunk with full control over model, length, and instructions.
+
+Components: client/src/components/ChunkedRewriter.tsx Main rewriter UI (2941 lines) client/src/components/DocumentRewriterModal.tsx Modal wrapper client/src/pages/DocumentRewrite.tsx Standalone rewrite page client/src/components/RewriteViewer.tsx View/compare rewrites client/src/components/SimpleRewriter.tsx Lightweight rewrite option
+
+Endpoints: POST /api/documents/process Upload file → extract text → chunk POST /api/documents/extract-text Extract plain text from PDF/DOCX/image POST /api/documents/chunk Split existing text into chunks POST /api/rewrite-document Rewrite full document or selected chunks POST /api/rewrite-chunk Rewrite a single chunk POST /api/rewrite-selection Rewrite user-selected text passage POST /api/generate-new-chunk Generate a brand-new chunk via AI POST /api/download-rewrite Download rewritten doc as .txt POST /api/share-rewrite Email rewritten document (SendGrid) POST /api/email-rewrite Alternative email endpoint POST /api/print-pdf Print-formatted PDF output GET /api/rewrites List saved rewrites for user POST /api/llm/download Download raw LLM output
+
+Rewrite options:
+
+Model: ZHI 1–5
+Length target: percentage multiplier (e.g. 120% = expand by 20%)
+Custom instructions: freeform text prompt per chunk or whole document
+Chunk selection: checkboxes per chunk, select all / deselect all
+Re-rewrite: open any previously rewritten output for a second pass
+Document ingestion: Supported formats: PDF, DOCX, TXT, images (OCR via Tesseract) Service: server/services/documentProcessor.ts → pdfExtractor / textExtractor / tesseractOcr depending on file type Chunking: server/services/documentChunker.ts — splits on paragraph/sentence boundaries with configurable chunk size
+
+Storage: rewrites table (originalContent, rewrittenContent, instructions, model, mode, sourceType, sourceId, metadata JSON)
+
+────────────────────────────────────────────────────────────────────────────── FEATURE 3 — HUMANIZER (GPT Bypass Humanizer) ────────────────────────────────────────────────────────────────────────────── Location: Home page (/) — Humanizer tab Purpose: Transform AI-generated text to evade AI detection. Runs GPTZero before and after to show score improvement.
+
+Components: client/src/components/Humanizer.tsx Main humanizer UI
+
+Endpoints: POST /api/humanizer/rewrite (server/routes/humanizer.ts) — rewrites using aiProviderService POST /api/ai-detection Run GPTZero on any text POST /api/humanizer/detect GPTZero check within humanizer flow
+
+Services: server/services/humanizer/aiProviders.ts AIProviderService class - rewrite(params: RewriteParams): calls chosen LLM with humanization prompt - Supports: openai / anthropic / deepseek / perplexity server/services/humanizer/textChunker.ts TextChunkerService class - chunk(text, maxWords): splits text into word-count-bounded chunks - Returns TextChunk[] with startWord/endWord indices server/services/humanizer/gptZero.ts GPTZero API wrapper server/services/humanizer/fileProcessor.ts File reading for uploaded input server/services/humanizer/storage.ts RewriteJob persistence
+
+Rewrite job schema (rewrite_jobs table): id, inputText, styleText, contentMixText, customInstructions, selectedPresets, provider, chunks (JSON), selectedChunkIds (JSON), mixingMode (style/content/both), outputText, inputAiScore, outputAiScore, status (pending/processing/complete/error)
+
+Humanization options:
+
+Style sample: paste text whose style to mimic
+Content mix: paste reference content to blend
+Custom instructions: freeform rewrite guidance
+Presets: predefined instruction templates (InstructionPreset[])
+Mixing mode: style-only / content-only / both
+Chunk selection: choose which chunks to reprocess
+────────────────────────────────────────────────────────────────────────────── FEATURE 4 — MIND PROFILER (Cognitive Profiler) ────────────────────────────────────────────────────────────────────────────── Location: /profile page Purpose: Analyse text across 17 cognitive dimensions with genre-aware calibration and visual score breakdowns.
+
+Components: client/src/pages/Profile.tsx Profile page UI client/src/components/MindProfiler.tsx Main profiler component
+
+Endpoints: POST /api/profile/revised-intelligence Core 17-dimension scoring POST /api/profile/instant Quick profile (single pass) POST /api/profile/comprehensive Deep profile (multi-pass) POST /api/profile/metacognitive-instant Metacognitive layer, fast POST /api/profile/metacognitive-comprehensive Full metacognitive analysis POST /api/profile/full-instant All dimensions, instant POST /api/profile/full-comprehensive All dimensions, comprehensive POST /api/profile/export Export profile as .txt POST /api/profile/email Email profile report POST /api/profile/chat Chat with the profile (ask questions about the analysis result) POST /api/debug/test-scoring Debug endpoint for score validation
+
+Services: server/services/revisedProfiling.ts - generateRevisedIntelligenceProfile(text): Promise - Scores 17 dimensions: depth, originality, argumentative rigor, conceptual control, semantic density, logical consistency, epistemic humility, creative synthesis, structural coherence, evidential quality, rhetorical precision, metacognitive awareness, analytical breadth, conceptual novelty, inferential quality, integrative thinking, paradigmatic challenge server/services/profiling.ts - Supplementary profiling functions, psychological dimension scoring
+
+Storage: profiles table (profileType, analysisType, inputText, results JSON, metadata)
+
+────────────────────────────────────────────────────────────────────────────── FEATURE 5 — TEXT-TO-SPEECH ────────────────────────────────────────────────────────────────────────────── Location: /tts page (TextToSpeech.tsx) Purpose: Convert text to natural audio with voice selection, playback, and downloadable output. Also supports multi-speaker dialogue audio generation.
+
+Components: client/src/pages/TextToSpeech.tsx TTS page UI
+
+Endpoints: GET /api/tts/voices Fetch available ElevenLabs voices POST /api/tts/extract-text Extract text from uploaded file for TTS POST /api/tts/generate-dialogue Generate multi-speaker audio from script POST /api/tts/parse-script Parse dialogue script into speaker turns GET /api/tts/download/:filename Stream/download generated audio file POST /api/document/clean-for-tts Pre-process text (remove LaTeX, symbols) POST /api/document/preview-cleaning Preview cleaned text before TTS
+
+Service: server/services/elevenlabs.ts - getVoices(): fetch voice list from ElevenLabs API - generateSpeech(text, voiceId): returns audio buffer - generateDialogue(script, voiceMap): multi-turn audio generation
+
+Audio output: saved to /tmp, served via /api/tts/download/:filename
+
+────────────────────────────────────────────────────────────────────────────── FEATURE 6 — GRAPH GENERATOR ────────────────────────────────────────────────────────────────────────────── Location: /graphs page (Graphs.tsx) Purpose: Convert natural language or mathematical expressions into rendered SVG charts and diagrams.
+
+Components: client/src/pages/Graphs.tsx Graphs page client/src/components/GraphGenerator.tsx Graph generator UI
+
+Endpoints: POST /api/generate-graphs Generate SVG from text description POST /api/generate-essay-with-graphs Generate essay + embedded graphs
+
+Service: server/services/graphGenerator.ts Interfaces: GraphData { type, title, labels[], datasets[], xLabel, yLabel, equation, points[] } GraphGenerationOptions { model, style, mode } Functions: parseGraphRequirements(text, options) — LLM call → GraphData parseMathExpression(expression) — Parse math → plot points generateSVG(graphData, width, height) — GraphData → SVG string generateEssayWithGraphs(text, options) — Full essay + graph objects
+
+Generation modes:
+
+Text Analysis: finds visualizable data in free text
+Mathematical Function: plots equations (x^2, sin(x), etc.)
+Complete Essay with Graphs: generates academic essay + inline visuals
+Model selector: ZHI 1–5 (per-generation) Style selector: Academic / Business / Scientific
+
+────────────────────────────────────────────────────────────────────────────── FEATURE 7 — AI DETECTION ────────────────────────────────────────────────────────────────────────────── Location: Embedded in Home page and Humanizer; also standalone route Purpose: Run GPTZero on any text and return per-sentence probability scores with overall document classification.
+
+Components: client/src/components/AIDetectionBadge.tsx Score badge (inline) client/src/components/AIDetectionButton.tsx Trigger button client/src/components/AIDetectionPopover.tsx Detailed popover results
+
+Endpoints: POST /api/ai-detection (server/routes/aiDetection.ts) POST /api/humanizer/detect Detection within humanizer flow
+
+Service: server/services/aiDetection.ts Calls GPTZero API, normalizes response server/services/gptZero.ts Raw GPTZero API wrapper server/services/humanizer/gptZero.ts Humanizer-scoped GPTZero instance
+
+Output: overall_burstiness, completely_generated_prob, sentence scores[], classification (human / mixed / ai)
+
+────────────────────────────────────────────────────────────────────────────── FEATURE 8 — TEXT-TO-MATH CONVERTER ────────────────────────────────────────────────────────────────────────────── Location: Home page — Text-to-Math tab Purpose: Convert prose mathematical descriptions into properly formatted LaTeX expressions, rendered with MathJax/KaTeX.
+
+Endpoint: POST /api/text-to-math LLM converts text → LaTeX
+
+Service: Uses openai.ts or deepseek.ts depending on model selection. Math sanitization pipeline: server/services/mathDelimiterFixer.ts — fixes delimiter mismatches shared/dollarSignHandler.ts — distinguishes $ currency vs $LaTeX$
+
+Math utilities: POST /api/math/sanitize-delimiters Fix malformed LaTeX in any text POST /api/math/test-cases Run delimiter test suite
+
+────────────────────────────────────────────────────────────────────────────── FEATURE 9 — DOCUMENT LIBRARY & ANALYTICS ────────────────────────────────────────────────────────────────────────────── Location: /documents, /analytics, /rewrite-history pages Purpose: Browse uploaded and rewritten documents; view usage analytics; review rewrite history.
+
+Components: client/src/pages/Documents.tsx Document library page client/src/pages/Analytics.tsx Analytics dashboard client/src/pages/RewriteHistory.tsx Rewrite history list client/src/components/AnalyticsDashboard.tsx Chart components client/src/components/DocumentLibrary.tsx Document browser
+
+Endpoints: GET /api/documents List documents for user GET /api/documents/:id Get single document DELETE /api/documents/:id Delete document GET /api/analytics Fetch usage analytics data POST /api/analytics/export Export analytics as CSV GET /api/rewrites List rewrite history POST /api/llm/prompt Multi-file LLM prompt (file upload)
+
+Documents table: id, userId, title, content, excerpt, model, date, metadata (JSON — AI detection scores etc.), chunks (JSON array)
+
+Analytics table: userId, timestamp, data (JSON — event type, model, tokens, document refs, etc.)
+
+────────────────────────────────────────────────────────────────────────────── FEATURE 10 — TEXT CLEANER & UTILITIES ────────────────────────────────────────────────────────────────────────────── Location: Embedded utility; accessible from rewrite flow Purpose: Strip hidden characters, normalise whitespace, fix paragraph structure in corrupted or exported text.
+
+Component: client/src/components/TextCleaner.tsx
+
+Endpoints: POST /api/document/preview-cleaning Show cleaned preview without saving POST /api/document/clean-for-tts Clean text specifically for TTS input POST /api/nuke Wipe user data (full reset) POST /api/speech-to-text Whisper transcription (audio → text)
+
+Service: server/services/documentCleaner.ts cleanText(raw): normalizes unicode, strips zero-width chars, fixes line breaks, preserves paragraphs server/services/speechToText.ts OpenAI Whisper API wrapper server/services/mathpix.ts Mathpix OCR for image-based math
+
+OCR: server/services/tesseractOcr.ts Tesseract.js — image text extraction Accepts: PNG, JPG, JPEG, TIFF, BMP, WebP Output: plain text fed directly into rewrite / TTS / analysis pipelines
+
+================================================================================ PART 3: COMPLETE FILE TREE
+/ ├── BOOK_BUILDER_BLUEPRINT.md # This document ├── README.md # Public-facing overview ├── replit.md # Project documentation and preferences ├── package.json # Dependencies and npm scripts ├── tsconfig.json # TypeScript configuration ├── vite.config.ts # Vite bundler config (DO NOT MODIFY) ├── drizzle.config.ts # Drizzle ORM config (DO NOT MODIFY) ├── tailwind.config.ts # Tailwind CSS config │ ├── /client/ # FRONTEND (React + TypeScript) │ └── /src/ │ ├── App.tsx # Root component, routing (Wouter) │ ├── main.tsx # React entry point │ ├── index.css # Global styles, CSS variables │ │ │ ├── /pages/ # Route-level page components │ │ ├── Home.tsx # Main page: chat + rewriter + tools │ │ ├── Login.tsx # Username/password login │ │ ├── Profile.tsx # Mind Profiler page │ │ ├── TextToSpeech.tsx # TTS page │ │ ├── Graphs.tsx # Graph Generator page │ │ ├── Documents.tsx # Document library │ │ ├── DocumentRewrite.tsx # Standalone document rewrite page │ │ ├── Conversations.tsx # Conversation management page │ │ ├── Analytics.tsx # Usage analytics dashboard │ │ ├── RewriteHistory.tsx # Rewrite history browser │ │ ├── Settings.tsx # App settings page │ │ └── not-found.tsx # 404 page │ │ │ ├── /components/ # Reusable UI components │ │ ├── ChunkedRewriter.tsx # Full chunked rewrite UI (2941 lines) │ │ ├── DocumentRewriterModal.tsx Modal wrapper for rewriter │ │ ├── ChatWindow.tsx # Main chat message thread │ │ ├── ChatDialogue.tsx # Auxiliary AI chat panel │ │ ├── ConversationList.tsx # Sidebar conversation list + create │ │ ├── Humanizer.tsx # GPT Bypass Humanizer UI │ │ ├── MindProfiler.tsx # Cognitive profile UI │ │ ├── GraphGenerator.tsx # Graph generation UI │ │ ├── ModelSelector.tsx # ZHI 1–5 model picker buttons │ │ ├── AnalyticsDashboard.tsx # Charts and analytics widgets │ │ ├── DocumentLibrary.tsx # Document browser with search │ │ ├── RewriteViewer.tsx # Side-by-side original/rewrite view │ │ ├── SimpleRewriter.tsx # Lightweight single-shot rewriter │ │ ├── TextCleaner.tsx # Text normalization utility │ │ ├── FileUpload.tsx # Drag-and-drop file upload │ │ ├── FileProcessor.tsx # File type detection + routing │ │ ├── Editor.tsx # Rich text editor component │ │ ├── OutputContainer.tsx # Formatted output wrapper │ │ ├── OutputSettings.tsx # Output format controls │ │ ├── AdvancedOptions.tsx # Collapsible advanced settings │ │ ├── ControlPanel.tsx # Sidebar control panel │ │ ├── AIDetectionBadge.tsx # Inline AI score badge │ │ ├── AIDetectionButton.tsx # Trigger button for detection │ │ ├── AIDetectionPopover.tsx # Detailed detection results popover │ │ ├── ChunkedDocumentViewer.tsx Chunk-by-chunk document browser │ │ ├── DocumentChunkSelector.tsx Chunk checkbox selector │ │ ├── DebugTester.tsx # Internal debug/test panel │ │ │ │ │ └── /layout/ │ │ ├── Header.tsx # Top nav: logo, links, user menu │ │ └── Footer.tsx # Bottom footer: links, copyright │ │ │ ├── /components/ui/ # shadcn/ui primitives (40+ files) │ │ ├── button.tsx │ │ ├── card.tsx │ │ ├── dialog.tsx │ │ ├── form.tsx │ │ ├── input.tsx │ │ ├── label.tsx │ │ ├── select.tsx │ │ ├── slider.tsx │ │ ├── tabs.tsx │ │ ├── textarea.tsx │ │ ├── toast.tsx / toaster.tsx │ │ ├── checkbox.tsx │ │ ├── badge.tsx │ │ ├── scroll-area.tsx │ │ ├── separator.tsx │ │ ├── speech-input.tsx # Voice input (Whisper) │ │ └── ... (30+ more primitives) │ │ │ ├── /hooks/ │ │ ├── use-auth.ts # Auth state, login/logout │ │ ├── use-conversations.ts # Conversation CRUD hooks │ │ ├── use-documents.ts # Document CRUD hooks │ │ ├── use-llm.ts # LLM call hooks │ │ ├── use-analytics.ts # Analytics data hook │ │ ├── use-toast.ts # Toast notification hook │ │ └── use-mobile.tsx # Viewport/mobile detection │ │ │ └── /lib/ │ ├── queryClient.ts # TanStack Query client + apiRequest() │ ├── utils.ts # Helpers: cn(), LLMModel type, │ │ # getModelDisplayName(), color maps │ ├── llm.ts # Frontend LLM call utilities │ └── wordCount.ts # Word count helpers │ ├── /server/ # BACKEND (Express + TypeScript) │ ├── index.ts # Server entry: Express setup, port 5000 │ ├── routes.ts # ALL API endpoints (6245 lines) │ ├── storage.ts # IStorage interface + MemStorage impl │ │ # (611 lines — all CRUD operations) │ ├── db.ts # Drizzle ORM + Neon PostgreSQL conn │ └── vite.ts # Vite dev middleware (DO NOT MODIFY) │ │ ├── /routes/ # Modular route files │ │ ├── aiDetection.ts # POST /api/ai-detection │ │ ├── humanizer.ts # POST /api/humanizer/rewrite + detect │ │ └── summarize.ts # Summarization endpoint │ │ │ ├── /services/ # Business logic services │ │ ├── openai.ts # ZHI 1 (GPT-4) API calls │ │ ├── anthropic.ts # ZHI 2 (Claude) API calls │ │ ├── deepseek.ts # ZHI 3 (DeepSeek) API calls │ │ ├── perplexity.ts # ZHI 4 (Perplexity) API calls │ │ ├── grok.ts # ZHI 5 (xAI Grok) API calls │ │ ├── documentRewriter.ts # rewriteDocument(text, options) │ │ ├── documentProcessor.ts # File upload → text extraction router │ │ ├── documentChunker.ts # Text → chunk array splitting │ │ ├── documentCleaner.ts # Text normalization / cleaning │ │ ├── largeDocumentProcessor.ts # Handles documents >100k characters │ │ ├── pdfExtractor.ts # PDF text extraction (pdf.js-extract) │ │ ├── textExtractor.ts # DOCX extraction (Mammoth) │ │ ├── tesseractOcr.ts # Image OCR (Tesseract.js) │ │ ├── mathpix.ts # Math OCR (Mathpix API) │ │ ├── elevenlabs.ts # TTS: voices, speech, dialogue │ │ ├── speechToText.ts # Whisper transcription │ │ ├── gptZero.ts # GPTZero AI detection │ │ ├── aiDetection.ts # Detection service wrapper │ │ ├── graphGenerator.ts # SVG graph generation service │ │ ├── profiling.ts # Cognitive profiling (base) │ │ ├── revisedProfiling.ts # 17-dimension revised profiling │ │ ├── analytics.ts # Analytics data aggregation │ │ ├── email.ts # SendGrid email sending │ │ ├── mathDelimiterFixer.ts # LaTeX delimiter repair │ │ │ │ │ └── /humanizer/ # Humanizer sub-services │ │ ├── aiProviders.ts # AIProviderService class │ │ ├── textChunker.ts # TextChunkerService class │ │ ├── gptZero.ts # GPTZero (humanizer scope) │ │ ├── fileProcessor.ts # File reading for humanizer │ │ └── storage.ts # RewriteJob CRUD │ │ │ └── /utils/ │ ├── openaiWrapper.ts # OpenAI client with retry logic │ └── RateLimiter.ts # Per-model rate limiting │ ├── /shared/ # Code shared by client + server │ ├── schema.ts # Drizzle schema + Zod insert schemas │ │ # + TypeScript types for all tables │ └── dollarSignHandler.ts # $ currency vs $LaTeX$ disambiguation │ └── /attached_assets/ # Source asset files (not web-served)
+
+================================================================================ PART 4: DATABASE SCHEMA
+Table: users id serial PK username text UNIQUE NOT NULL password text NOT NULL
+
+Table: documents id text PK userId integer NOT NULL title text NOT NULL content text NOT NULL — full document text excerpt text NOT NULL — first ~200 chars model text NOT NULL — ZHI model used date timestamp NOT NULL metadata text — JSON: aiDetectionScore, wordCount, etc. chunks json DEFAULT '[]' — DocumentChunk[] array
+
+Table: conversations id serial PK userId integer NOT NULL title text NOT NULL createdAt timestamp DEFAULT now() updatedAt timestamp DEFAULT now() contextDocumentIds text — JSON array of document IDs model text — default model for this conversation metadata text — JSON: settings, preferences
+
+Table: messages id serial PK conversationId integer NOT NULL role text NOT NULL — "user" | "assistant" content text NOT NULL timestamp timestamp DEFAULT now() metadata text — JSON: tokens, model, processingTime documentReferences text — JSON: referenced document IDs
+
+Table: rewrites id serial PK userId integer NOT NULL originalContent text NOT NULL rewrittenContent text NOT NULL instructions text model text NOT NULL mode text NOT NULL — "rewrite" | "homework" createdAt timestamp DEFAULT now() metadata text — JSON: chunksProcessed, originalLength sourceType text — "document" | "chat" | "direct_input" sourceId text — ref to source document or conversation
+
+Table: profiles id serial PK userId integer NOT NULL profileType text NOT NULL — "cognitive" | "psychological" analysisType text NOT NULL — "instant" | "comprehensive" inputText text results json NOT NULL — full scored profile object createdAt timestamp DEFAULT now() metadata text
+
+Table: rewrite_jobs — Humanizer job tracking id text PK inputText text NOT NULL styleText text contentMixText text customInstructions text selectedPresets json — string[] provider text NOT NULL chunks json — TextChunk[] selectedChunkIds json — string[] mixingMode text — 'style' | 'content' | 'both' outputText text inputAiScore integer outputAiScore integer status text DEFAULT 'pending' createdAt timestamp DEFAULT now()
+
+Table: analytics id serial PK userId integer NOT NULL timestamp timestamp NOT NULL data text NOT NULL — JSON: eventType, model, tokens, etc.
+
+================================================================================ PART 5: AI MODEL ROUTING
+All LLM calls in routes.ts use a switch/case pattern:
+
+switch (model) { case 'gpt4': → openai.ts (OPENAI_API_KEY) case 'claude': → anthropic.ts (ANTHROPIC_API_KEY) case 'deepseek': → deepseek.ts (DEEPSEEK_API_KEY or XAI via base URL) case 'perplexity': → perplexity.ts (PERPLEXITY_API_KEY) case 'grok': → grok.ts (XAI_API_KEY) default: → deepseek.ts (fallback) }
+
+Display names (getModelDisplayName() in client/src/lib/utils.ts): gpt4 → ZHI 1 claude → ZHI 2 deepseek → ZHI 3 perplexity → ZHI 4 grok → ZHI 5
+
+Environment secrets used: OPENAI_API_KEY ZHI 1 calls + Whisper STT ANTHROPIC_API_KEY ZHI 2 calls (DeepSeek key) ZHI 3 calls PERPLEXITY_API_KEY ZHI 4 calls XAI_API_KEY ZHI 5 calls GPTZERO_API_KEY AI detection ELEVEN_LABS_API_KEY Text-to-speech
+
+Rate limiting: server/utils/RateLimiter.ts — per-model token bucket to prevent API quota exhaustion across concurrent requests.
+
+================================================================================ PART 6: KEY SERVICE INTERFACES
+── DocumentRewriter (server/services/documentRewriter.ts) ── interface RewriteOptions { model: string — 'gpt4' | 'claude' | 'deepseek' | 'perplexity' | 'grok' instructions?: string — custom rewrite prompt lengthTarget?: number — multiplier e.g. 1.2 = 20% longer } export async function rewriteDocument(text: string, opts: RewriteOptions) → Promise
+
+── RevisedProfiling (server/services/revisedProfiling.ts) ── interface RevisedIntelligenceProfile { overallScore: number dimensions: { name: string; score: number; explanation: string }[] genre: string summary: string recommendations: string[] } export async function generateRevisedIntelligenceProfile(text: string) → Promise
+
+── GraphGenerator (server/services/graphGenerator.ts) ── interface GraphData { type: 'bar' | 'line' | 'scatter' | 'pie' | 'function' title: string labels: string[] datasets: { label: string; data: number[]; color?: string }[] xLabel?: string; yLabel?: string equation?: string points?: { x: number; y: number }[] } export async function parseGraphRequirements(text, opts): Promise export function generateSVG(data: GraphData, w: number, h: number): string
+
+── AIProviderService (server/services/humanizer/aiProviders.ts) ── interface RewriteParams { text: string styleText?: string contentMixText?: string customInstructions?: string selectedPresets?: string[] mixingMode?: 'style' | 'content' | 'both' } class AIProviderService { rewrite(provider: string, params: RewriteParams): Promise }
+
+── ElevenLabs (server/services/elevenlabs.ts) ── getVoices(): Promise<Voice[]> generateSpeech(text: string, voiceId: string): Promise generateDialogue(script: DialogueTurn[], voiceMap: Record<string, string>) → Promise
+
+── Storage Interface (server/storage.ts) ── IStorage { // Users getUser(id), getUserByUsername(username), createUser(user) // Documents getDocument(id), getDocumentsByUserId(userId), createDocument(doc), updateDocument(id, partial), deleteDocument(id) // Conversations getConversation(id), getConversationsByUserId(userId), createConversation(conv), updateConversation(id, partial), deleteConversation(id) // Messages getMessage(id), getMessagesByConversationId(convId), createMessage(msg), updateMessage(id, partial) // Rewrites getRewrite(id), getRewritesByUserId(userId), createRewrite(rw), deleteRewrite(id) // Profiles getProfile(id), getProfilesByUserId(userId), createProfile(p), deleteProfile(id) } Current implementation: MemStorage (in-memory Maps) DB implementation: PostgreSQL via Drizzle (db.ts) — used in production
+
+================================================================================ PART 7: FRONTEND STATE & DATA FLOW
+Global state: TanStack Query (server state) + React useState/useContext (local) Routing: Wouter — routes defined in client/src/App.tsx API calls: apiRequest() from client/src/lib/queryClient.ts — wraps fetch with auth headers, JSON body, error handling
+
+Key query keys: ['/api/conversations'] — conversation list ['/api/conversations', id] — single conversation ['/api/conversations', id, 'messages'] — message list ['/api/documents'] — document library ['/api/rewrites'] — rewrite history ['/api/analytics'] — analytics data ['/api/tts/voices'] — ElevenLabs voice list
+
+Mutation pattern: const mutation = useMutation({ mutationFn: (data) => apiRequest('POST', '/api/some-endpoint', data), onSuccess: () => queryClient.invalidateQueries({ queryKey: [...] }) })
+
+Loading states: mutation.isPending / query.isLoading shown in all forms Error states: toast notifications via useToast() hook Math rendering: toggled per-chat via local state → applies KaTeX to message content using a regex-based LaTeX detection pass
+
+================================================================================ PART 8: KNOWN COMPLEXITY AREAS
+ChunkedRewriter.tsx (2941 lines) — The largest single file. Contains: chunk display, per-chunk rewrite, selection logic, re-rewrite dialog, custom text selection rewrite, generate-new-chunk dialog, save/download/email/print controls, and math view toggle. Split candidates: chunk display, action dialogs, output controls.
+
+routes.ts (6245 lines) — All endpoints in one file. Most complex areas: rewrite-document (lines ~1089–1246), profile endpoints (lines ~3279–5836), and document chunking (lines ~5896–6084).
+
+Math rendering pipeline — LaTeX delimiters ($$...$$, [...], (...)) must survive the entire round-trip: LLM output → response JSON → React render → KaTeX. mathDelimiterFixer.ts and dollarSignHandler.ts guard different failure modes. Any new LLM response pathway must pass through the sanitizer.
+
+Humanizer rewrite job flow — Jobs are created in rewrite_jobs table → chunks processed sequentially → GPTZero polled before and after. If a chunk fails, the job status is set to 'error' but already-processed chunks are preserved. Partial results are recoverable.
+
+MemStorage vs PostgreSQL — Server currently boots with MemStorage by default (see server/storage.ts). The PostgreSQL DatabaseStorage class exists but MemStorage is the active implementation. All data is lost on server restart unless switched. To persist: instantiate DatabaseStorage from db.ts instead.
+
+================================================================================ PART 9: NAVIGATION MAP
+Route Component Feature / Home.tsx Chat + Rewriter + Tools hub /login Login.tsx Authentication /profile Profile.tsx Mind Profiler /tts TextToSpeech.tsx Text-to-Speech /graphs Graphs.tsx Graph Generator /documents Documents.tsx Document Library /rewrite DocumentRewrite.tsx Standalone Rewriter /conversations Conversations.tsx Conversation Manager /analytics Analytics.tsx Usage Analytics /rewrite-history RewriteHistory.tsx Rewrite History /settings Settings.tsx App Settings
+
+Header (layout/Header.tsx): Logo → /, nav links to all main sections, user session status Footer (layout/Footer.tsx): Privacy, Terms, Help & Support links; copyright
+
+================================================================================ PART 10: EXTERNAL API DEPENDENCY MAP
+Provider Secret Used In ────────────────────────────────────────────────────────────────── OpenAI (GPT-4) OPENAI_API_KEY ZHI 1 LLM calls; Whisper STT Anthropic ANTHROPIC_API_KEY ZHI 2 LLM calls DeepSeek (env key) ZHI 3 LLM calls (default fallback) Perplexity PERPLEXITY_API_KEY ZHI 4 LLM calls xAI / Grok XAI_API_KEY ZHI 5 LLM calls GPTZero GPTZERO_API_KEY AI detection (all detection flows) ElevenLabs ELEVEN_LABS_API_KEY Text-to-speech, voice list, dialogue SendGrid (env key) Email: share rewrites, chat exports Tesseract.js (local lib) OCR — no API key required Mathpix (env key) Math OCR from images
