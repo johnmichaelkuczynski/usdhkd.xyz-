@@ -265,12 +265,90 @@ st.sidebar.caption(
 # Load data + fit equilibrium (shared across all tabs)
 # ---------------------------------------------------------------------------
 
-st.title("USD/HKD Edge — Probability Forecasts")
-st.caption(
-    "Note: USD/HKD is a pegged regime (HKMA convertibility band 7.75–7.85). "
-    "Stochastic-vol and jump models will produce structurally tight distributions; "
-    "treat results as relative-model comparisons rather than free-float forecasts."
-)
+_title_col, _diag_col = st.columns([5, 1])
+with _title_col:
+    st.title("USD/HKD Edge — Probability Forecasts")
+    st.caption(
+        "Note: USD/HKD is a pegged regime (HKMA convertibility band 7.75–7.85). "
+        "Stochastic-vol and jump models will produce structurally tight distributions; "
+        "treat results as relative-model comparisons rather than free-float forecasts."
+    )
+with _diag_col:
+    st.write("")
+    if st.button("🔧 Run diagnostic", use_container_width=True,
+                 help="Full system + functional self-check. Runtime ~10–40 s."):
+        from engine.diagnostic import run_diagnostic
+        with st.spinner("Running self-check…"):
+            st.session_state["last_diagnostic"] = run_diagnostic()
+
+
+def _render_diagnostic(report: dict) -> None:
+    import json as _json
+    totals = report.get("totals", {})
+    n_pass = totals.get("pass", 0)
+    n_fail = totals.get("fail", 0)
+    n_skip = totals.get("skip", 0)
+    run_at = report.get("runAt", "")
+    banner_col, dl_col = st.columns([4, 1])
+    with banner_col:
+        if report.get("ok"):
+            st.success(
+                f"**All checks passed.**  \n"
+                f"{n_pass} passed · {n_fail} failed · {n_skip} skipped · run at {run_at}"
+            )
+        else:
+            st.error(
+                f"**{n_fail} check{'s' if n_fail != 1 else ''} failed.**  \n"
+                f"{n_pass} passed · {n_fail} failed · {n_skip} skipped · run at {run_at}"
+            )
+    with dl_col:
+        st.download_button(
+            "Download full report (.json)",
+            data=_json.dumps(report, indent=2, default=str),
+            file_name=f"diagnostic-{run_at.replace(':', '-')}.json",
+            mime="application/json",
+            use_container_width=True,
+        )
+
+    groups: dict[str, list[dict]] = {}
+    for c in report.get("checks", []):
+        groups.setdefault(c.get("group", "other"), []).append(c)
+    group_titles = {"system": "1. System Check", "functional": "2. Functional Check"}
+    for gkey in ["system", "functional"] + [g for g in groups if g not in ("system", "functional")]:
+        items = groups.get(gkey, [])
+        if not items:
+            continue
+        with st.container(border=True):
+            st.subheader(group_titles.get(gkey, gkey.title()))
+            for c in items:
+                status = c.get("status", "skip")
+                icon = {"pass": "✅", "fail": "❌", "skip": "⏭️"}.get(status, "•")
+                row_l, row_r = st.columns([6, 1])
+                with row_l:
+                    st.markdown(f"{icon}  **{c['name']}**")
+                    info = c.get("info", "")
+                    if info:
+                        st.caption(info)
+                    ev = c.get("evidence") or []
+                    if ev:
+                        with st.expander(f"Show evidence ({len(ev)} item{'s' if len(ev) != 1 else ''})"):
+                            for item in ev:
+                                st.markdown(
+                                    f"- *{item.get('kind', '')}* — **{item.get('label', '')}**"
+                                )
+                                v = item.get("value")
+                                if isinstance(v, (dict, list)):
+                                    st.json(v, expanded=False)
+                                else:
+                                    st.code(str(v))
+                with row_r:
+                    st.caption(f"{c.get('ms', 0)}ms")
+                st.divider()
+
+
+if "last_diagnostic" in st.session_state:
+    _render_diagnostic(st.session_state["last_diagnostic"])
+    st.markdown("---")
 
 try:
     fx = load_fx_history()

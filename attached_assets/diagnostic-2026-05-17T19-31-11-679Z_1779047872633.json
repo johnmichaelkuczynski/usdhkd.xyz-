@@ -1,0 +1,499 @@
+{
+  "ok": false,
+  "runAt": "2026-05-17T19:31:11.679Z",
+  "totals": {
+    "pass": 19,
+    "fail": 3,
+    "skip": 2
+  },
+  "checks": [
+    {
+      "name": "Environment: ANTHROPIC_API_KEY present",
+      "group": "system",
+      "status": "pass",
+      "ms": 0,
+      "info": "length=108 chars (value redacted)",
+      "evidence": [
+        {
+          "kind": "assertion",
+          "label": "process.env.ANTHROPIC_API_KEY is non-empty",
+          "value": {
+            "present": true,
+            "length": 108
+          }
+        }
+      ]
+    },
+    {
+      "name": "Environment: XAI_API_KEY present",
+      "group": "system",
+      "status": "pass",
+      "ms": 0,
+      "info": "length=84 chars (value redacted)",
+      "evidence": [
+        {
+          "kind": "assertion",
+          "label": "process.env.XAI_API_KEY is non-empty",
+          "value": {
+            "present": true,
+            "length": 84
+          }
+        }
+      ]
+    },
+    {
+      "name": "Environment: GPTZERO_API_KEY present",
+      "group": "system",
+      "status": "fail",
+      "ms": 0,
+      "info": "not set",
+      "evidence": [
+        {
+          "kind": "assertion",
+          "label": "process.env.GPTZERO_API_KEY is non-empty",
+          "value": {
+            "present": false,
+            "length": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "Environment: ELEVEN_LABS_API_KEY present",
+      "group": "system",
+      "status": "pass",
+      "ms": 0,
+      "info": "length=51 chars (value redacted)",
+      "evidence": [
+        {
+          "kind": "assertion",
+          "label": "process.env.ELEVEN_LABS_API_KEY is non-empty",
+          "value": {
+            "present": true,
+            "length": 51
+          }
+        }
+      ]
+    },
+    {
+      "name": "Environment: PERPLEXITY_API_KEY present",
+      "group": "system",
+      "status": "pass",
+      "ms": 0,
+      "info": "length=53 chars (value redacted)",
+      "evidence": [
+        {
+          "kind": "assertion",
+          "label": "process.env.PERPLEXITY_API_KEY is non-empty",
+          "value": {
+            "present": true,
+            "length": 53
+          }
+        }
+      ]
+    },
+    {
+      "name": "Environment: DATABASE_URL present",
+      "group": "system",
+      "status": "pass",
+      "ms": 0,
+      "info": "length=112 chars (value redacted)",
+      "evidence": [
+        {
+          "kind": "assertion",
+          "label": "process.env.DATABASE_URL is non-empty",
+          "value": {
+            "present": true,
+            "length": 112
+          }
+        }
+      ]
+    },
+    {
+      "name": "Storage: layer type",
+      "group": "system",
+      "status": "pass",
+      "ms": 0,
+      "info": "DatabaseStorage",
+      "evidence": [
+        {
+          "kind": "output",
+          "label": "storage class",
+          "value": "DatabaseStorage"
+        },
+        {
+          "kind": "output",
+          "label": "note",
+          "value": "Database: persistent"
+        }
+      ]
+    },
+    {
+      "name": "Database: connectivity (SELECT 1)",
+      "group": "system",
+      "status": "pass",
+      "ms": 779,
+      "info": "ok",
+      "evidence": [
+        {
+          "kind": "query",
+          "label": "SQL",
+          "value": "SELECT 1 as ok"
+        },
+        {
+          "kind": "output",
+          "label": "rows returned",
+          "value": {
+            "command": "SELECT",
+            "rowCount": 1,
+            "oid": null,
+            "rows": [
+              {
+                "ok": 1
+              }
+            ],
+            "fields": [
+              {
+                "name": "ok",
+                "tableID": 0,
+                "columnID": 0,
+                "dataTypeID": 23,
+                "dataTypeSize": 4,
+                "dataTypeModifier": -1,
+                "format": "text"
+              }
+            ],
+            "_parsers": [
+              null
+            ],
+            "_types": {},
+            "RowCtor": null,
+            "rowAsArray": false
+          }
+        }
+      ]
+    },
+    {
+      "name": "Storage: conversation round-trip",
+      "group": "system",
+      "status": "pass",
+      "ms": 868,
+      "info": "id=1 created, fetched, deleted",
+      "evidence": [
+        {
+          "kind": "output",
+          "label": "created id",
+          "value": 1
+        },
+        {
+          "kind": "assertion",
+          "label": "fetch returns record",
+          "value": {
+            "ok": true
+          }
+        },
+        {
+          "kind": "assertion",
+          "label": "delete removes record",
+          "value": {
+            "gone": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "Storage: document round-trip",
+      "group": "system",
+      "status": "pass",
+      "ms": 708,
+      "info": "id=doc_1 created, fetched, deleted",
+      "evidence": [
+        {
+          "kind": "output",
+          "label": "document id",
+          "value": "doc_1"
+        },
+        {
+          "kind": "assertion",
+          "label": "fetch returns record",
+          "value": {
+            "ok": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "Model available: ZHI 1 (GPT-4)",
+      "group": "system",
+      "status": "pass",
+      "ms": 0,
+      "info": "API key present",
+      "evidence": [
+        {
+          "kind": "assertion",
+          "label": "OPENAI_API_KEY present",
+          "value": {
+            "present": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "Model available: ZHI 2 (Claude)",
+      "group": "system",
+      "status": "pass",
+      "ms": 0,
+      "info": "API key present",
+      "evidence": [
+        {
+          "kind": "assertion",
+          "label": "ANTHROPIC_API_KEY present",
+          "value": {
+            "present": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "Model available: ZHI 3 (DeepSeek)",
+      "group": "system",
+      "status": "pass",
+      "ms": 0,
+      "info": "API key present",
+      "evidence": [
+        {
+          "kind": "assertion",
+          "label": "DEEPSEEK_API_KEY present",
+          "value": {
+            "present": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "Model available: ZHI 4 (Perplexity)",
+      "group": "system",
+      "status": "pass",
+      "ms": 0,
+      "info": "API key present",
+      "evidence": [
+        {
+          "kind": "assertion",
+          "label": "PERPLEXITY_API_KEY present",
+          "value": {
+            "present": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "Model available: ZHI 5 (Grok)",
+      "group": "system",
+      "status": "pass",
+      "ms": 0,
+      "info": "API key present",
+      "evidence": [
+        {
+          "kind": "assertion",
+          "label": "XAI_API_KEY present",
+          "value": {
+            "present": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "Functional: text cleaner round-trip",
+      "group": "functional",
+      "status": "pass",
+      "ms": 0,
+      "info": "zero-width chars stripped",
+      "evidence": [
+        {
+          "kind": "input",
+          "label": "dirty char count",
+          "value": 38
+        },
+        {
+          "kind": "output",
+          "label": "cleaned char count",
+          "value": 33
+        },
+        {
+          "kind": "assertion",
+          "label": "zero-width chars removed",
+          "value": {
+            "ok": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "Functional: document chunk split",
+      "group": "functional",
+      "status": "skip",
+      "ms": 3,
+      "info": "chunker utility not importable — manual chunk via API only",
+      "evidence": []
+    },
+    {
+      "name": "Functional: GPTZero API live ping",
+      "group": "functional",
+      "status": "skip",
+      "ms": 0,
+      "info": "GPTZERO_API_KEY not set",
+      "evidence": []
+    },
+    {
+      "name": "Functional: ElevenLabs TTS voices reachable",
+      "group": "functional",
+      "status": "pass",
+      "ms": 304,
+      "info": "50 voices returned",
+      "evidence": [
+        {
+          "kind": "query",
+          "label": "GET",
+          "value": "https://api.elevenlabs.io/v1/voices"
+        },
+        {
+          "kind": "output",
+          "label": "HTTP status",
+          "value": 200
+        },
+        {
+          "kind": "output",
+          "label": "round-trip time (ms)",
+          "value": 291
+        },
+        {
+          "kind": "output",
+          "label": "voice count",
+          "value": 50
+        },
+        {
+          "kind": "output",
+          "label": "first voice name",
+          "value": "Roger - Laid-Back, Casual, Resonant"
+        }
+      ]
+    },
+    {
+      "name": "Functional: ZHI 2 (Claude) live ping",
+      "group": "functional",
+      "status": "fail",
+      "ms": 1,
+      "info": "processAnthropic is not a function",
+      "evidence": [
+        {
+          "kind": "error",
+          "label": "exception",
+          "value": "processAnthropic is not a function"
+        }
+      ]
+    },
+    {
+      "name": "Functional: ZHI 3 (DeepSeek) live ping",
+      "group": "functional",
+      "status": "pass",
+      "ms": 1027,
+      "info": "response=DIAGNOSTIC_OK",
+      "evidence": [
+        {
+          "kind": "input",
+          "label": "probe message",
+          "value": "Reply with exactly: DIAGNOSTIC_OK"
+        },
+        {
+          "kind": "output",
+          "label": "round-trip time (ms)",
+          "value": 1026
+        },
+        {
+          "kind": "output",
+          "label": "response",
+          "value": "DIAGNOSTIC_OK"
+        }
+      ]
+    },
+    {
+      "name": "Functional: ZHI 5 (Grok) live ping",
+      "group": "functional",
+      "status": "fail",
+      "ms": 3,
+      "info": "ZHI 5 processing failed: text.replace is not a function",
+      "evidence": [
+        {
+          "kind": "error",
+          "label": "exception",
+          "value": "ZHI 5 processing failed: text.replace is not a function"
+        }
+      ]
+    },
+    {
+      "name": "Invariant: ZHI label integrity (no provider leaks)",
+      "group": "functional",
+      "status": "pass",
+      "ms": 0,
+      "info": "all 5 providers map to ZHI 1–5",
+      "evidence": [
+        {
+          "kind": "output",
+          "label": "model → ZHI label map",
+          "value": {
+            "gpt4": "ZHI 1",
+            "claude": "ZHI 2",
+            "deepseek": "ZHI 3",
+            "perplexity": "ZHI 4",
+            "grok": "ZHI 5"
+          }
+        },
+        {
+          "kind": "assertion",
+          "label": "all 5 providers have ZHI labels",
+          "value": {
+            "ok": true
+          }
+        },
+        {
+          "kind": "output",
+          "label": "provider names to suppress in UI",
+          "value": [
+            "OpenAI",
+            "Anthropic",
+            "Claude",
+            "GPT-4",
+            "DeepSeek",
+            "Grok",
+            "xAI",
+            "Perplexity"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Functional: analytics data readable",
+      "group": "functional",
+      "status": "pass",
+      "ms": 707,
+      "info": "docs=0 convs=0 rewrites=0",
+      "evidence": [
+        {
+          "kind": "output",
+          "label": "documents",
+          "value": 0
+        },
+        {
+          "kind": "output",
+          "label": "conversations",
+          "value": 0
+        },
+        {
+          "kind": "output",
+          "label": "rewrites",
+          "value": 0
+        }
+      ]
+    }
+  ]
+}
